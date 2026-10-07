@@ -21,6 +21,7 @@ dependencies {
     implementation("org.flywaydb:flyway-core:13.9.0")
     implementation("org.flywaydb:flyway-database-postgresql:13.9.0")
 
+    testImplementation("io.papermc.paper:paper-api:26.2.build.132-stable")
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

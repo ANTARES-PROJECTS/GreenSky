@@ -16,5 +16,9 @@ database:
   pool-size: 10
   # A senha NUNCA fica aqui: use a variável de ambiente GREENSKY_DB_PASSWORD.
 
+world:
+  name: greensky_world  # pasta do mundo SkyBlock; nao pode ser world/world_nether/world_the_end
+  spawn-y: 100          # altura do spawn fixo (mundo void)
+
 performance:
   max-entities-per-island: 500

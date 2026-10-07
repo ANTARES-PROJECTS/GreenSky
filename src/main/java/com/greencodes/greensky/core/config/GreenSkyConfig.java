@@ -3,7 +3,8 @@ package com.greencodes.greensky.core.config;
 import org.bukkit.configuration.ConfigurationSection;
 
 /** Configuração tipada e já validada. Imutável; um reload cria uma nova instância. */
-public record GreenSkyConfig(IslandSettings islands, DatabaseSettings database, int maxEntitiesPerIsland) {
+public record GreenSkyConfig(
+        IslandSettings islands, DatabaseSettings database, WorldSettings world, int maxEntitiesPerIsland) {
 
     public GreenSkyConfig {
         if (maxEntitiesPerIsland <= 0) {
@@ -18,6 +19,7 @@ public record GreenSkyConfig(IslandSettings islands, DatabaseSettings database, 
     public static GreenSkyConfig load(ConfigurationSection root) throws ConfigException {
         ConfigurationSection islands = require(root, "islands");
         ConfigurationSection database = require(root, "database");
+        ConfigurationSection world = require(root, "world");
         ConfigurationSection performance = require(root, "performance");
         try {
             return new GreenSkyConfig(
@@ -32,6 +34,7 @@ public record GreenSkyConfig(IslandSettings islands, DatabaseSettings database, 
                             database.getString("name"),
                             database.getString("user"),
                             database.getInt("pool-size")),
+                    new WorldSettings(world.getString("name"), world.getInt("spawn-y")),
                     performance.getInt("max-entities-per-island"));
         } catch (IllegalArgumentException e) {
             throw new ConfigException(e.getMessage());
