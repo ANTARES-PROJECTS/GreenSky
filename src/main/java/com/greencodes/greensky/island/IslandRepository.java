@@ -114,6 +114,50 @@ public final class IslandRepository {
         insertPermissions(c, islandId, player, permissions);
     }
 
+    /** Todas as ilhas (só metadados: id, dono, região, estado). Usado para montar o índice espacial. */
+    public List<Island> findAll(Connection c) throws SQLException {
+        List<Island> result = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement(SELECT_ISLAND + "ORDER BY slot");
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                result.add(read(rs));
+            }
+        }
+        return result;
+    }
+
+    /** Participações de um jogador (dono ou membro) em qualquer ilha, com as permissões. */
+    public List<IslandMember> membershipsOf(Connection c, UUID player) throws SQLException {
+        Map<UUID, Set<IslandPermission>> permissions = new HashMap<>();
+        try (PreparedStatement ps = c.prepareStatement(
+                "SELECT island_id, permission FROM island_permissions WHERE player_uuid = ?")) {
+            ps.setObject(1, player);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    permissions
+                            .computeIfAbsent(rs.getObject(1, UUID.class), k -> EnumSet.noneOf(IslandPermission.class))
+                            .add(IslandPermission.valueOf(rs.getString(2)));
+                }
+            }
+        }
+        List<IslandMember> result = new ArrayList<>();
+        try (PreparedStatement ps =
+                c.prepareStatement("SELECT island_id, role FROM island_members WHERE player_uuid = ?")) {
+            ps.setObject(1, player);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID islandId = rs.getObject(1, UUID.class);
+                    result.add(new IslandMember(
+                            islandId,
+                            player,
+                            IslandRole.valueOf(rs.getString(2)),
+                            permissions.getOrDefault(islandId, EnumSet.noneOf(IslandPermission.class))));
+                }
+            }
+        }
+        return result;
+    }
+
     public Optional<IslandMember> findMember(Connection c, UUID islandId, UUID player) throws SQLException {
         return members(c, islandId).stream().filter(m -> m.playerId().equals(player)).findFirst();
     }
@@ -170,16 +214,17 @@ public final class IslandRepository {
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setObject(1, key);
             try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    return Optional.empty();
-                }
-                return Optional.of(new Island(
-                        rs.getObject("id", UUID.class),
-                        rs.getObject("owner_uuid", UUID.class),
-                        rs.getLong("slot"),
-                        new IslandRegion(rs.getInt("center_x"), rs.getInt("center_z"), rs.getInt("size")),
-                        IslandState.valueOf(rs.getString("state"))));
+                return rs.next() ? Optional.of(read(rs)) : Optional.empty();
             }
         }
+    }
+
+    private static Island read(ResultSet rs) throws SQLException {
+        return new Island(
+                rs.getObject("id", UUID.class),
+                rs.getObject("owner_uuid", UUID.class),
+                rs.getLong("slot"),
+                new IslandRegion(rs.getInt("center_x"), rs.getInt("center_z"), rs.getInt("size")),
+                IslandState.valueOf(rs.getString("state")));
     }
 }

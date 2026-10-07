@@ -233,6 +233,86 @@ class IslandServiceIT {
         service.removeMember(island, friend, friend).get(10, TimeUnit.SECONDS);
     }
 
+    @Test
+    void loadAllAndMembershipsReflectTheDatabase() throws Exception {
+        UUID owner = player();
+        UUID friend = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "loader").get(10, TimeUnit.SECONDS);
+        service.addMember(island, owner, friend, "friend3").get(10, TimeUnit.SECONDS);
+        service.setPermissions(island, owner, friend, EnumSet.of(IslandPermission.BUILD, IslandPermission.KICK))
+                .get(10, TimeUnit.SECONDS);
+
+        assertTrue(service.loadAll().get(10, TimeUnit.SECONDS).stream().anyMatch(i -> i.id().equals(island.id())));
+
+        List<IslandMember> ownerMemberships = service.membershipsOf(owner).get(10, TimeUnit.SECONDS);
+        assertEquals(1, ownerMemberships.size());
+        assertEquals(IslandRole.OWNER, ownerMemberships.get(0).role());
+
+        List<IslandMember> friendMemberships = service.membershipsOf(friend).get(10, TimeUnit.SECONDS);
+        assertEquals(1, friendMemberships.size());
+        assertEquals(island.id(), friendMemberships.get(0).islandId());
+        assertEquals(EnumSet.of(IslandPermission.BUILD, IslandPermission.KICK), friendMemberships.get(0).permissions());
+
+        assertTrue(service.membershipsOf(player()).get(10, TimeUnit.SECONDS).isEmpty());
+    }
+
+    @Test
+    void listenersAreNotifiedOnlyAfterSuccessfulChanges() throws Exception {
+        UUID owner = player();
+        UUID friend = player();
+        List<String> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        IslandService service = service(new FakeBuilder(0));
+        service.addListener(new IslandListener() {
+            @Override
+            public void onIslandCreated(Island island, IslandMember member) {
+                events.add("created");
+            }
+
+            @Override
+            public void onMemberAdded(IslandMember member) {
+                events.add("added");
+            }
+
+            @Override
+            public void onMemberRemoved(UUID islandId, UUID playerId) {
+                events.add("removed");
+            }
+
+            @Override
+            public void onMemberPermissionsChanged(IslandMember member) {
+                events.add("perms");
+            }
+        });
+
+        Island island = service.create(owner, "notify").get(10, TimeUnit.SECONDS);
+        service.addMember(island, owner, friend, "friend4").get(10, TimeUnit.SECONDS);
+        service.setPermissions(island, owner, friend, EnumSet.of(IslandPermission.BUILD)).get(10, TimeUnit.SECONDS);
+        service.removeMember(island, owner, friend).get(10, TimeUnit.SECONDS);
+        assertEquals(List.of("created", "added", "perms", "removed"), events);
+
+        // Operações recusadas não notificam nada.
+        events.clear();
+        assertReason(IslandException.Reason.NOT_OWNER, service.addMember(island, friend, friend, "x"));
+        assertReason(IslandException.Reason.NOT_A_MEMBER, service.removeMember(island, owner, friend));
+        assertReason(IslandException.Reason.ALREADY_HAS_ISLAND, service.create(owner, "notify"));
+        assertTrue(events.isEmpty(), "eventos indevidos: " + events);
+    }
+
+    @Test
+    void aFailingListenerDoesNotBreakTheOperation() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        service.addListener(new IslandListener() {
+            @Override
+            public void onIslandCreated(Island island, IslandMember member) {
+                throw new IllegalStateException("listener com defeito");
+            }
+        });
+        Island island = service.create(owner, "fragile").get(10, TimeUnit.SECONDS);
+        assertTrue(island.isReady());
+    }
+
     private static void assertReason(IslandException.Reason expected, CompletableFuture<?> future) {
         ExecutionException e = assertThrows(ExecutionException.class, () -> future.get(10, TimeUnit.SECONDS));
         Throwable root = root(e);

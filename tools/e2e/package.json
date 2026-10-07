@@ -1,0 +1,8 @@
+{
+  "name": "greensky-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Teste de ponta a ponta do GreenSky com bots reais (mineflayer) contra o servidor de teste em run/",
+  "scripts": { "test": "node protection-e2e.mjs" },
+  "dependencies": { "mineflayer": "4.39.0", "vec3": "0.1.10" }
+}

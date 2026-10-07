@@ -11,12 +11,18 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Regras de negócio das ilhas. Tudo é assíncrono; nenhuma chamada bloqueia a thread do
  * servidor. Falhas de regra chegam como {@link IslandException} dentro do future.
  */
 public final class IslandService {
+
+    private static final Logger LOGGER = Logger.getLogger(IslandService.class.getName());
 
     private final Database database;
     private final IslandRepository islands;
@@ -26,6 +32,8 @@ public final class IslandService {
 
     /** Cache dono -> ilha. Só guarda ilhas existentes; atualizado na criação e no estado. */
     private final ConcurrentMap<UUID, Island> byOwner = new ConcurrentHashMap<>();
+
+    private final List<IslandListener> listeners = new CopyOnWriteArrayList<>();
 
     public IslandService(
             Database database,
@@ -58,7 +66,27 @@ public final class IslandService {
                     islands.addMember(c, island.id(), owner, IslandRole.OWNER, EnumSet.noneOf(IslandPermission.class));
                     return island;
                 })
-                .thenCompose(this::generate);
+                .thenCompose(island -> {
+                    // Avisa já com a linha gravada, antes de gerar os blocos: a proteção cobre a área desde o início.
+                    IslandMember ownerMember =
+                            new IslandMember(island.id(), owner, IslandRole.OWNER, EnumSet.noneOf(IslandPermission.class));
+                    notifyListeners(l -> l.onIslandCreated(island, ownerMember));
+                    return generate(island);
+                });
+    }
+
+    /** Todas as ilhas, para montar o índice espacial da proteção. */
+    public CompletableFuture<List<Island>> loadAll() {
+        return database.query(islands::findAll);
+    }
+
+    /** Participações do jogador (dono ou membro) em qualquer ilha. */
+    public CompletableFuture<List<IslandMember>> membershipsOf(UUID player) {
+        return database.query(c -> islands.membershipsOf(c, player));
+    }
+
+    public void addListener(IslandListener listener) {
+        listeners.add(listener);
     }
 
     /** Ilha da qual o jogador é dono, se houver. */
@@ -96,6 +124,9 @@ public final class IslandService {
             players.upsert(c, target, targetName);
             islands.addMember(c, island.id(), target, IslandRole.MEMBER, defaults);
             return new IslandMember(island.id(), target, IslandRole.MEMBER, defaults);
+        }).thenApply(member -> {
+            notifyListeners(l -> l.onMemberAdded(member));
+            return member;
         });
     }
 
@@ -117,7 +148,7 @@ public final class IslandService {
                 throw new IslandException(IslandException.Reason.NOT_A_MEMBER);
             }
             return null;
-        });
+        }).thenAccept(ignored -> notifyListeners(l -> l.onMemberRemoved(island.id(), target)));
     }
 
     /**
@@ -137,6 +168,9 @@ public final class IslandService {
             }
             islands.setPermissions(c, island.id(), target, permissions);
             return null;
+        }).thenAccept(ignored -> {
+            IslandMember updated = new IslandMember(island.id(), target, IslandRole.MEMBER, permissions);
+            notifyListeners(l -> l.onMemberPermissionsChanged(updated));
         });
     }
 
@@ -156,6 +190,17 @@ public final class IslandService {
                     byOwner.put(ready.owner(), ready);
                     return ready;
                 });
+    }
+
+    private void notifyListeners(Consumer<IslandListener> action) {
+        for (IslandListener listener : listeners) {
+            try {
+                action.accept(listener);
+            } catch (RuntimeException e) {
+                // Um listener com defeito não pode derrubar a operação já gravada.
+                LOGGER.log(Level.SEVERE, "IslandListener falhou", e);
+            }
+        }
     }
 
     private static <T> CompletableFuture<T> denied(IslandException.Reason reason) {

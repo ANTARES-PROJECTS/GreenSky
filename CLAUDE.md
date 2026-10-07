@@ -26,9 +26,10 @@ Plugin Paper de um SkyBlock RPG. Visão completa do jogo: `README.md — GreenSk
 - [x] Fase 2 — Database
 - [x] Fase 3 — World
 - [x] Fase 4 — Islands
+- [x] Fase 5 — Protection
 - [ ] Compat — ViaVersion/ViaBackwards (planejado abaixo, não implementado)
-- [ ] Fase 5 — Protection (próxima; **aguarda aprovação**)
-- [ ] 6 Expansion · 7 First Playable · 8+ conteúdo
+- [ ] Fase 6 — Expansion (próxima; **aguarda aprovação**)
+- [ ] 7 First Playable · 8+ conteúdo
 
 Regra: implementar **somente a fase aprovada**, uma por vez. Cada fase termina compilando, testada, rodando no Paper de teste, e com um commit.
 
@@ -61,7 +62,23 @@ player/                 # PlayerRepository (upsert em players)
 island/                 # Island, IslandRegion (espiral de slots), IslandMember/Role/Permission,
                         # IslandRepository (SQL), IslandService (regras, async, cache dono->ilha),
                         # IslandBuilder (interface) + StarterIslandBuilder (ilha por código), IslandCommand
+protection/             # IslandIndex (índice espacial em memória), IslandProtectionService (decisões, sem Bukkit),
+                        # PlayerProtectionListener, WorldProtectionListener, ProtectionSessionListener, DenyNotifier
 resources/db/migration/ # V1__players.sql, V2__islands.sql (Flyway)
+tools/e2e/              # teste de ponta a ponta com bots reais (mineflayer); node_modules ignorado
+```
+
+Proteção (fase 5): regras em `IslandProtectionService`; listeners só traduzem eventos.
+- Antes de carregar as ilhas, ou fora de qualquer ilha (spawn, vazio), **tudo é negado**.
+- Dentro de uma ilha: só membros, conforme `IslandPermission` (dono tem tudo). Visitante não faz nada.
+- Efeitos sem jogador (explosão, pistão, líquido, hopper, fogo, crescimento, dispenser) não cruzam a fronteira da região.
+- Pérola/fruta do coro só levam a ilhas das quais o jogador é membro.
+- Bypass: permissão `greensky.admin.bypass` (op).
+- `IslandService` avisa a proteção por `IslandListener` depois de gravar no banco; participações carregam no join.
+
+Teste com bots (servidor de teste precisa de `online-mode=false` e `server-ip=127.0.0.1` em `run/server.properties`; **nunca em produção**):
+```bash
+cd tools/e2e && npm install --ignore-scripts && JAVA="$JAVA_HOME/bin/java.exe" node protection-e2e.mjs
 ```
 
 Comando: `/island` (alias `/is`): `create`, `home`, `info`, `add <online>`, `remove <nome>`, e
@@ -99,7 +116,12 @@ Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos
 - `World.generateTree(Location, TreeType)` é deprecated; usar `generateTree(Location, Random, TreeType)`.
 - Os testes `*IT` consomem a sequência de slots: ilhas de teste ficam em posições altas, com buracos. Normal.
 - Comandos de console no teste: `execute in minecraft:greensky_world run forceload add X Z` antes de `execute ... if block`; `if block` não leva `run`.
-- **Não testado com cliente real:** `/is create`, `/is home` (teleportAsync), `/is info`, `/is add|remove`. Só o caminho `admin create` e o serviço foram exercitados (sem Player).
+- `TeleportCause.CHORUS_FRUIT` está deprecated para remoção; usar `CONSUMABLE_EFFECT`.
+- `getOfflinePlayer(String)` pode consultar a Mojang (rede); em comandos use `getOfflinePlayerIfCached`.
+- Config: toda chave é obrigatória (`requireInt`/`requireString`); chave nova sem valor no config.yml do usuário impede o boot com mensagem clara.
+- Água no Minecraft corre só na direção da queda mais próxima (até 4 blocos): testes de fluido precisam de piso largo.
+- Lacunas conhecidas da proteção (não cobertas): pegar/dropar itens por visitantes, PvP, dano de mobs a entidades, barcos colocados em água, projéteis acionando botões/alvos, laço/vara de pesca puxando entidades, endermen dentro da ilha. Visitantes não podem nem abrir portas (decisão: configurável na fase social).
+- Corrida no join: se um membro for adicionado enquanto as participações carregam, ele fica sem acesso até reentrar (erra para negar).
 
 ## Plano ViaVersion (clientes 1.21.x entrarem no servidor 26.1.2)
 

@@ -14,7 +14,10 @@ public record GreenSkyConfig(
     }
 
     /**
-     * @throws ConfigException se uma seção estiver ausente ou algum valor violar as regras
+     * Toda chave é obrigatória: um valor ausente nunca vira 0 em silêncio (ex.: um config.yml
+     * antigo, de antes de uma chave nova existir, faz o plugin recusar o boot dizendo o que falta).
+     *
+     * @throws ConfigException se uma seção/chave estiver ausente ou algum valor violar as regras
      */
     public static GreenSkyConfig load(ConfigurationSection root) throws ConfigException {
         ConfigurationSection islands = require(root, "islands");
@@ -24,20 +27,20 @@ public record GreenSkyConfig(
         try {
             return new GreenSkyConfig(
                     new IslandSettings(
-                            islands.getInt("initial-size"),
-                            islands.getInt("max-size"),
-                            islands.getInt("spacing"),
-                            islands.getInt("spacing-margin"),
-                            islands.getInt("base-y"),
-                            islands.getInt("starter-radius")),
+                            requireInt(islands, "initial-size"),
+                            requireInt(islands, "max-size"),
+                            requireInt(islands, "spacing"),
+                            requireInt(islands, "spacing-margin"),
+                            requireInt(islands, "base-y"),
+                            requireInt(islands, "starter-radius")),
                     new DatabaseSettings(
-                            database.getString("host"),
-                            database.getInt("port"),
-                            database.getString("name"),
-                            database.getString("user"),
-                            database.getInt("pool-size")),
-                    new WorldSettings(world.getString("name"), world.getInt("spawn-y")),
-                    performance.getInt("max-entities-per-island"));
+                            requireString(database, "host"),
+                            requireInt(database, "port"),
+                            requireString(database, "name"),
+                            requireString(database, "user"),
+                            requireInt(database, "pool-size")),
+                    new WorldSettings(requireString(world, "name"), requireInt(world, "spawn-y")),
+                    requireInt(performance, "max-entities-per-island"));
         } catch (IllegalArgumentException e) {
             throw new ConfigException(e.getMessage());
         }
@@ -49,5 +52,27 @@ public record GreenSkyConfig(
             throw new ConfigException("Seção obrigatória ausente no config.yml: '" + path + "'");
         }
         return section;
+    }
+
+    private static int requireInt(ConfigurationSection section, String key) throws ConfigException {
+        if (!section.isInt(key)) {
+            throw new ConfigException(missing(section, key, "um número inteiro"));
+        }
+        return section.getInt(key);
+    }
+
+    private static String requireString(ConfigurationSection section, String key) throws ConfigException {
+        if (!section.isString(key)) {
+            throw new ConfigException(missing(section, key, "um texto"));
+        }
+        return section.getString(key);
+    }
+
+    private static String missing(ConfigurationSection section, String key, String expected) {
+        String path = section.getCurrentPath() == null || section.getCurrentPath().isEmpty()
+                ? key
+                : section.getCurrentPath() + "." + key;
+        return "'" + path + "' ausente ou inválido no config.yml (esperado " + expected + ")."
+                + " Se você atualizou o plugin, copie a chave do config.yml padrão.";
     }
 }

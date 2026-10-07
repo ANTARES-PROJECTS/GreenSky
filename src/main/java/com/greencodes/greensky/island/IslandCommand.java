@@ -70,7 +70,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             return SUBCOMMANDS.stream().filter(s -> s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();
         }
-        return List.of();
+        // null = o servidor sugere nomes de jogadores online (útil em add/remove).
+        return args.length == 2 ? null : List.of();
     }
 
     private void create(CommandSender reply, UUID uuid, String name, Player teleportTo) {
@@ -146,7 +147,12 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             send(owner, "Uso: /is remove <jogador>", NamedTextColor.YELLOW);
             return;
         }
-        OfflinePlayer target = server.getOfflinePlayer(args[1]);
+        // IfCached: nunca faz consulta à Mojang (rede) na thread do servidor.
+        OfflinePlayer target = server.getOfflinePlayerIfCached(args[1]);
+        if (target == null) {
+            send(owner, "Jogador '" + args[1] + "' nunca entrou no servidor.", NamedTextColor.RED);
+            return;
+        }
         service.findByOwner(owner.getUniqueId())
                 .thenCompose(found -> found.isPresent()
                         ? service.removeMember(found.get(), owner.getUniqueId(), target.getUniqueId())
@@ -171,7 +177,11 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             send(sender, "Uso: /is admin create <nick>", NamedTextColor.YELLOW);
             return;
         }
-        OfflinePlayer target = server.getOfflinePlayer(args[2]);
+        OfflinePlayer target = server.getOfflinePlayerIfCached(args[2]);
+        if (target == null) {
+            send(sender, "Jogador '" + args[2] + "' nunca entrou no servidor.", NamedTextColor.RED);
+            return;
+        }
         String name = target.getName() != null ? target.getName() : args[2];
         create(sender, target.getUniqueId(), name, null);
     }

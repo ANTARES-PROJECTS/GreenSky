@@ -11,8 +11,16 @@ import com.greencodes.greensky.island.IslandRepository;
 import com.greencodes.greensky.island.IslandService;
 import com.greencodes.greensky.island.StarterIslandBuilder;
 import com.greencodes.greensky.player.PlayerRepository;
+import com.greencodes.greensky.protection.DenyNotifier;
+import com.greencodes.greensky.protection.IslandProtectionService;
+import com.greencodes.greensky.protection.PlayerProtectionListener;
+import com.greencodes.greensky.protection.ProtectionSessionListener;
+import com.greencodes.greensky.protection.WorldProtectionListener;
 import com.greencodes.greensky.world.WorldManager;
+import java.util.logging.Level;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class GreenSkyPlugin extends JavaPlugin {
@@ -64,6 +72,29 @@ public final class GreenSkyPlugin extends JavaPlugin {
                 config.islands());
         IslandCommand islandCommand = new IslandCommand(
                 getServer(), getLogger(), islandService, worldManager.requireLoaded(), config.islands(), scheduler);
+
+        // Proteção: índice em memória alimentado pelo banco; até carregar, tudo é negado.
+        DenyNotifier notifier = new DenyNotifier();
+        IslandProtectionService protection = new IslandProtectionService();
+        islandService.addListener(protection);
+        PluginManager plugins = getServer().getPluginManager();
+        plugins.registerEvents(new PlayerProtectionListener(protection, worldManager.requireLoaded(), notifier), this);
+        plugins.registerEvents(new WorldProtectionListener(protection, worldManager.requireLoaded()), this);
+        plugins.registerEvents(new ProtectionSessionListener(protection, islandService, notifier, getLogger()), this);
+        islandService.loadAll().whenComplete((all, error) -> {
+            if (error != null) {
+                getLogger().log(Level.SEVERE, "Falha ao carregar as ilhas; a proteção negará tudo.", error);
+            } else {
+                protection.load(all);
+                getLogger().info("Proteção ativa: " + all.size() + " ilha(s) indexada(s).");
+            }
+        });
+        // Quem já estava online (ex.: /reload) precisa ter as participações carregadas.
+        for (Player online : getServer().getOnlinePlayers()) {
+            islandService.membershipsOf(online.getUniqueId())
+                    .thenAccept(members -> protection.playerJoined(online.getUniqueId(), members));
+        }
+
         PluginCommand command = getCommand("island");
         command.setExecutor(islandCommand);
         command.setTabCompleter(islandCommand);

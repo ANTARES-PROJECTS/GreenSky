@@ -16,3 +16,4 @@ run/
 .env
 *.env
 run-*/
+node_modules/

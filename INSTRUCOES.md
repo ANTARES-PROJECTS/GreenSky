@@ -5,7 +5,7 @@ Registro de cada alteração, por fase, com o motivo. Pasta do projeto: `C:\User
 ## Resumo
 
 GreenSky é um plugin para **Paper 26.1.2 (build 74, STABLE)** com **Java 25**, **Gradle 9.8.0**
-(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 (Core), 2 (Database) e 3 (World), feitas
+(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 a 5 (Core, Database, World, Islands, Protection); as fases 1 a 3 foram feitas
 na 26.2 e migradas para a 26.1.2 depois (ver "Troca de versão").
 Três commits, 21 testes automatizados, tudo validado rodando num Paper de teste.
 
@@ -166,6 +166,61 @@ de teste (`run/`). O nome gravado de `tester1` saiu em minúsculas; só afeta ex
 
 ---
 
+## Fase 5 — Protection
+
+**APIs conferidas na jar 26.1.2:** as 27 classes de evento usadas existem. `TeleportCause.CHORUS_FRUIT` está
+marcado para remoção; usei `CONSUMABLE_EFFECT` (substituto indicado na Javadoc).
+
+**Código novo (`protection/`):**
+- `IslandIndex`: índice espacial em memória (baldes de 512x512); acha a ilha de um bloco sem consultar o banco
+  e não depende do `spacing` do config. Pronto para a expansão (substitui a região da ilha).
+- `IslandProtectionService`: decide tudo sem Bukkit (testável). Nega tudo antes de carregar e fora de ilhas;
+  dentro, só membros com a permissão; `sameIsland` para efeitos de mundo.
+- `PlayerProtectionListener`: quebrar, construir, baldes, interagir com blocos, abrir containers, entidades
+  (animais, aldeões, quadros, armor stands, veículos), isqueiro, e fuga por pérola/fruta do coro.
+- `WorldProtectionListener`: explosões, pistões, líquidos, hoppers, fogo natural, crescimento de árvores,
+  dispensers e entidades que mudam blocos não cruzam a fronteira da ilha.
+- `ProtectionSessionListener`: carrega participações no join, limpa no quit. `DenyNotifier`: aviso na action bar (1/s).
+- `IslandService`: `loadAll()`, `membershipsOf()` e `IslandListener` (notifica só depois de gravar; listener com
+  defeito não derruba a operação). `IslandRepository`: `findAll` e `membershipsOf`.
+- `plugin.yml`: permissão `greensky.admin.bypass` (op).
+
+**Testes:** `IslandIndexTest` (6), `IslandProtectionServiceTest` (10) e 3 novos em `IslandServiceIT`.
+
+**Teste com bots reais (`tools/e2e/protection-e2e.mjs`, mineflayer 4.39.0):** sobe o Paper 26.1.2, conecta
+Alice e Bob e confere cada efeito no console do servidor. **22/22, em duas execuções seguidas:**
+create/home/info com jogador real, segunda ilha recusada, dono constrói e quebra, visitante não constrói,
+não quebra, não abre baú e a pérola não o teleporta; depois de `/is add` o Bob pode tudo isso; depois de
+`/is remove` volta a ser bloqueado; `/is home` traz de volta; explosão fora da ilha não destrói nada e
+dentro não cruza a fronteira; água não sai da região; pistão não empura para fora (com controle dentro).
+Para os bots entrarem, o `run/server.properties` de teste usa `online-mode=false` e `server-ip=127.0.0.1`.
+
+**Erros meus no teste, corrigidos:** o check da segunda ilha pegava a mensagem "Criando a ilha..."; o teste
+da água tinha piso de 1 bloco (a água caía pelos lados e nunca andava no eixo testado, o que deixava o check
+de "não sai" vazio); e o teste não era repetível (estado da execução anterior). Nenhum era bug do plugin.
+
+**Não testado de ponta a ponta:** hoppers, fogo, crescimento de árvore, dispenser, entidades (quadros, armor
+stands, animais, veículos), fruta do coro e containers além do baú. A lógica de decisão deles está nos testes
+unitários; a ligação evento -> decisão só foi exercitada nos casos acima.
+
+**Lacunas conhecidas:** ver "Armadilhas" no `CLAUDE.md`.
+
+## Revisão das fases anteriores (junto com a Fase 5)
+
+Reli o código das fases 1 a 4. Corrigido:
+1. **Config com chave ausente virava 0 em silêncio** (`getInt`). Um config.yml antigo sem `islands.base-y`
+   colocaria ilhas em y=0. Agora toda chave é obrigatória e o boot falha dizendo qual falta.
+   Novo `GreenSkyConfigTest` (5) lê o `config.yml` real do jar.
+2. **`/is remove` e `/is admin create` usavam `getOfflinePlayer(String)`**, que pode consultar a Mojang pela
+   rede na thread do servidor (proibido pelo README). Trocado por `getOfflinePlayerIfCached`; nome nunca
+   visto gera mensagem clara. Isso também resolve o nome `tester1` gravado em minúsculas.
+3. **Tab completion** de `/is add|remove` agora sugere jogadores online.
+
+Revisado sem mudança: transações e rollback do `Database`, ordem de fechamento no disable, espiral e
+regiões, recuperação de ilha PENDING, relocação do Shadow, `.env` fora do git.
+
+---
+
 ## Troca de versão: 26.2 -> 26.1.2 (depois da Fase 3)
 
 **Motivo:** você quis um servidor mais leve para o PC de quem joga. Pesquisei a 1.20.6 (último
@@ -206,8 +261,8 @@ cd run && java -jar paper-26.1.2-74.jar --nogui
 
 ## Pendências
 
-- **Fase 5 (Protection)** aguardando sua aprovação.
-- Testar `/is create|home|info|add|remove` com um cliente real.
+- **Fase 6 (Expansion)** aguardando sua aprovação.
+- Teste com bots cobre create/home/info/add/remove; falta um teste manual com cliente Minecraft de verdade.
 - `verifyVoid()` avisa se o chunk 0,0 tem blocos (no `run/` há um bloco de ouro de teste); em produção o slot 0 é reservado, então o chunk fica vazio.
 - Decidir se o mundo `world` padrão usará o gerador void via `bukkit.yml`.
 - Paper 26.1.2 está sem suporte no Paper: reavaliar 26.2/26.3.

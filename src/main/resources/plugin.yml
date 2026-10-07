@@ -15,3 +15,6 @@ permissions:
   greensky.admin:
     description: Comandos administrativos do GreenSky
     default: op
+  greensky.admin.bypass:
+    description: Ignora a proteção das ilhas (construir, quebrar e abrir em qualquer ilha)
+    default: op
