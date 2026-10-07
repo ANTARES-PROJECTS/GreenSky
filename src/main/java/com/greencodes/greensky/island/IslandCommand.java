@@ -113,7 +113,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 Island island = found.get();
                 IslandRegion r = island.region();
                 send(player, "Ilha #" + island.slot() + " | centro " + r.centerX() + ", " + r.centerZ()
-                        + " | tamanho " + r.size() + " | " + island.state(), NamedTextColor.AQUA);
+                        + " | tamanho " + r.size() + " | nível " + service.levelOf(island) + " | " + island.state(),
+                        NamedTextColor.AQUA);
             }
         });
     }
@@ -167,14 +168,18 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 });
     }
 
-    /** {@code /is admin create <nick>}: cria a ilha de um jogador (online ou não). */
+    /**
+     * {@code /is admin create <nick>}: cria a ilha de um jogador (online ou não).
+     * {@code /is admin expand <nick>}: sobe a ilha do jogador um nível (sem custo; a economia vem depois).
+     */
     private void admin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("greensky.admin")) {
             send(sender, "Sem permissão.", NamedTextColor.RED);
             return;
         }
-        if (args.length < 3 || !args[1].equalsIgnoreCase("create")) {
-            send(sender, "Uso: /is admin create <nick>", NamedTextColor.YELLOW);
+        String action = args.length >= 3 ? args[1].toLowerCase(Locale.ROOT) : "";
+        if (!action.equals("create") && !action.equals("expand")) {
+            send(sender, "Uso: /is admin <create|expand> <nick>", NamedTextColor.YELLOW);
             return;
         }
         OfflinePlayer target = server.getOfflinePlayerIfCached(args[2]);
@@ -182,8 +187,25 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             send(sender, "Jogador '" + args[2] + "' nunca entrou no servidor.", NamedTextColor.RED);
             return;
         }
-        String name = target.getName() != null ? target.getName() : args[2];
-        create(sender, target.getUniqueId(), name, null);
+        if (action.equals("create")) {
+            String name = target.getName() != null ? target.getName() : args[2];
+            create(sender, target.getUniqueId(), name, null);
+            return;
+        }
+        service.findByOwner(target.getUniqueId())
+                .thenCompose(found -> found.isPresent()
+                        ? service.expand(found.get())
+                        : java.util.concurrent.CompletableFuture.<Island>failedFuture(
+                                new IslandException(IslandException.Reason.NO_ISLAND)))
+                .whenComplete((island, error) -> {
+                    if (error != null) {
+                        fail(sender, error);
+                    } else {
+                        send(sender, "Ilha de " + args[2] + " expandida para " + island.region().size() + "x"
+                                + island.region().size() + " (nível " + service.levelOf(island) + ").",
+                                NamedTextColor.GREEN);
+                    }
+                });
     }
 
     private void teleportHome(Player player, Island island) {
@@ -217,6 +239,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case ALREADY_MEMBER -> "Esse jogador já é membro da ilha.";
             case NOT_A_MEMBER -> "Esse jogador não é membro da ilha.";
             case CANNOT_REMOVE_OWNER -> "O dono não pode ser removido da própria ilha.";
+            case MAX_SIZE_REACHED -> "A ilha já está no tamanho máximo.";
+            case EXPANSION_CONFLICT -> "A ilha acabou de ser expandida por outra ação. Tente de novo.";
         };
     }
 

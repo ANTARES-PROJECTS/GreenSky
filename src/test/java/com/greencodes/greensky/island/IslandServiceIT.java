@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.greencodes.greensky.core.config.DatabaseSettings;
+import com.greencodes.greensky.core.config.ExpansionSettings;
 import com.greencodes.greensky.core.config.IslandSettings;
 import com.greencodes.greensky.database.Database;
 import com.greencodes.greensky.player.PlayerRepository;
@@ -74,8 +75,79 @@ class IslandServiceIT {
         return id;
     }
 
+    private static final ExpansionSettings EXPANSION =
+            new ExpansionSettings(List.of(100, 150, 200, 300, 500)).validateAgainst(SETTINGS);
+
     private static IslandService service(FakeBuilder builder) {
-        return new IslandService(db, new IslandRepository(), new PlayerRepository(), builder, SETTINGS);
+        return new IslandService(db, new IslandRepository(), new PlayerRepository(), builder, SETTINGS, EXPANSION);
+    }
+
+    @Test
+    void expandsThroughAllLevelsKeepingTheCenterAndStopsAtMax() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "grower").get(10, TimeUnit.SECONDS);
+        List<String> expanded = new java.util.concurrent.CopyOnWriteArrayList<>();
+        service.addListener(new IslandListener() {
+            @Override
+            public void onIslandExpanded(Island i) {
+                expanded.add(i.region().size() + "");
+            }
+        });
+
+        for (int size : new int[] {150, 200, 300, 500}) {
+            island = service.expand(island).get(10, TimeUnit.SECONDS);
+            assertEquals(size, island.region().size());
+        }
+        assertEquals(List.of("150", "200", "300", "500"), expanded);
+        assertEquals(5, service.levelOf(island));
+        assertReason(IslandException.Reason.MAX_SIZE_REACHED, service.expand(island));
+
+        // Persistiu; o centro nunca mudou (a ilha não se move).
+        Island loaded = service(new FakeBuilder(0)).findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(500, loaded.region().size());
+        assertEquals(island.region().centerX(), loaded.region().centerX());
+        assertEquals(island.region().centerZ(), loaded.region().centerZ());
+    }
+
+    @Test
+    void simultaneousExpansionsOfTheSameIslandApplyOnlyOnce() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "racer2").get(10, TimeUnit.SECONDS);
+
+        List<CompletableFuture<Island>> attempts = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            attempts.add(service.expand(island)); // todos partem do mesmo tamanho (100)
+        }
+        int ok = 0;
+        int conflicts = 0;
+        for (CompletableFuture<Island> attempt : attempts) {
+            try {
+                assertEquals(150, attempt.get(10, TimeUnit.SECONDS).region().size());
+                ok++;
+            } catch (ExecutionException e) {
+                assertEquals(IslandException.Reason.EXPANSION_CONFLICT, ((IslandException) root(e)).reason());
+                conflicts++;
+            }
+        }
+        assertEquals(1, ok);
+        assertEquals(7, conflicts);
+        Island loaded = service(new FakeBuilder(0)).findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(150, loaded.region().size(), "só um nível deve ter sido aplicado");
+    }
+
+    @Test
+    void staleIslandObjectCannotSkipALevel() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island old = service.create(owner, "stale").get(10, TimeUnit.SECONDS);
+        service.expand(old).get(10, TimeUnit.SECONDS); // 100 -> 150
+        // Usar de novo o objeto antigo (tamanho 100) não pode aplicar 150 por cima de 150.
+        assertReason(IslandException.Reason.EXPANSION_CONFLICT, service.expand(old));
+        Island fresh = service.findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(150, fresh.region().size());
+        assertEquals(200, service.expand(fresh).get(10, TimeUnit.SECONDS).region().size());
     }
 
     @Test

@@ -4,7 +4,11 @@ import org.bukkit.configuration.ConfigurationSection;
 
 /** Configuração tipada e já validada. Imutável; um reload cria uma nova instância. */
 public record GreenSkyConfig(
-        IslandSettings islands, DatabaseSettings database, WorldSettings world, int maxEntitiesPerIsland) {
+        IslandSettings islands,
+        ExpansionSettings expansion,
+        DatabaseSettings database,
+        WorldSettings world,
+        int maxEntitiesPerIsland) {
 
     public GreenSkyConfig {
         if (maxEntitiesPerIsland <= 0) {
@@ -25,14 +29,16 @@ public record GreenSkyConfig(
         ConfigurationSection world = require(root, "world");
         ConfigurationSection performance = require(root, "performance");
         try {
+            IslandSettings islandSettings = new IslandSettings(
+                    requireInt(islands, "initial-size"),
+                    requireInt(islands, "max-size"),
+                    requireInt(islands, "spacing"),
+                    requireInt(islands, "spacing-margin"),
+                    requireInt(islands, "base-y"),
+                    requireInt(islands, "starter-radius"));
             return new GreenSkyConfig(
-                    new IslandSettings(
-                            requireInt(islands, "initial-size"),
-                            requireInt(islands, "max-size"),
-                            requireInt(islands, "spacing"),
-                            requireInt(islands, "spacing-margin"),
-                            requireInt(islands, "base-y"),
-                            requireInt(islands, "starter-radius")),
+                    islandSettings,
+                    new ExpansionSettings(requireIntList(islands, "expansion-levels")).validateAgainst(islandSettings),
                     new DatabaseSettings(
                             requireString(database, "host"),
                             requireInt(database, "port"),
@@ -59,6 +65,14 @@ public record GreenSkyConfig(
             throw new ConfigException(missing(section, key, "um número inteiro"));
         }
         return section.getInt(key);
+    }
+
+    private static java.util.List<Integer> requireIntList(ConfigurationSection section, String key)
+            throws ConfigException {
+        if (!section.isList(key) || section.getList(key).stream().anyMatch(v -> !(v instanceof Integer))) {
+            throw new ConfigException(missing(section, key, "uma lista de números inteiros"));
+        }
+        return section.getIntegerList(key);
     }
 
     private static String requireString(ConfigurationSection section, String key) throws ConfigException {

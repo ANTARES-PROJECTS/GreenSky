@@ -1,5 +1,7 @@
 package com.greencodes.greensky;
 
+import com.greencodes.greensky.border.IslandBorderListener;
+import com.greencodes.greensky.border.IslandBorderService;
 import com.greencodes.greensky.core.GreenScheduler;
 import com.greencodes.greensky.core.config.ConfigException;
 import com.greencodes.greensky.core.config.DatabaseSettings;
@@ -69,7 +71,8 @@ public final class GreenSkyPlugin extends JavaPlugin {
                 new IslandRepository(),
                 new PlayerRepository(),
                 new StarterIslandBuilder(worldManager.requireLoaded(), scheduler, config.islands()),
-                config.islands());
+                config.islands(),
+                config.expansion());
         IslandCommand islandCommand = new IslandCommand(
                 getServer(), getLogger(), islandService, worldManager.requireLoaded(), config.islands(), scheduler);
 
@@ -81,6 +84,12 @@ public final class GreenSkyPlugin extends JavaPlugin {
         plugins.registerEvents(new PlayerProtectionListener(protection, worldManager.requireLoaded(), notifier), this);
         plugins.registerEvents(new WorldProtectionListener(protection, worldManager.requireLoaded()), this);
         plugins.registerEvents(new ProtectionSessionListener(protection, islandService, notifier, getLogger()), this);
+
+        // Borda visual por jogador (fase 6). Registrada depois da proteção: usa o mesmo índice.
+        IslandBorderService borders =
+                new IslandBorderService(getServer(), worldManager.requireLoaded(), protection, scheduler);
+        islandService.addListener(borders);
+        plugins.registerEvents(new IslandBorderListener(borders), this);
         islandService.loadAll().whenComplete((all, error) -> {
             if (error != null) {
                 getLogger().log(Level.SEVERE, "Falha ao carregar as ilhas; a proteção negará tudo.", error);

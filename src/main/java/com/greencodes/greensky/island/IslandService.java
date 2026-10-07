@@ -1,11 +1,13 @@
 package com.greencodes.greensky.island;
 
+import com.greencodes.greensky.core.config.ExpansionSettings;
 import com.greencodes.greensky.core.config.IslandSettings;
 import com.greencodes.greensky.database.Database;
 import com.greencodes.greensky.player.PlayerRepository;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +31,7 @@ public final class IslandService {
     private final PlayerRepository players;
     private final IslandBuilder builder;
     private final IslandSettings settings;
+    private final ExpansionSettings expansion;
 
     /** Cache dono -> ilha. Só guarda ilhas existentes; atualizado na criação e no estado. */
     private final ConcurrentMap<UUID, Island> byOwner = new ConcurrentHashMap<>();
@@ -40,12 +43,48 @@ public final class IslandService {
             IslandRepository islands,
             PlayerRepository players,
             IslandBuilder builder,
-            IslandSettings settings) {
+            IslandSettings settings,
+            ExpansionSettings expansion) {
         this.database = database;
         this.islands = islands;
         this.players = players;
         this.builder = builder;
         this.settings = settings;
+        this.expansion = expansion;
+    }
+
+    /**
+     * Sobe a ilha para o próximo nível: mesmo centro, região maior. Não regenera nada (o
+     * mundo é void; a área nova já existe vazia). Uma única UPDATE condicional garante que,
+     * de duas expansões simultâneas, só uma vale. Nada a recuperar após crash: ou a linha
+     * mudou, ou não.
+     *
+     * @throws IslandException (no future) MAX_SIZE_REACHED ou EXPANSION_CONFLICT
+     */
+    public CompletableFuture<Island> expand(Island island) {
+        OptionalInt next = expansion.nextAfter(island.region().size());
+        if (next.isEmpty()) {
+            return denied(IslandException.Reason.MAX_SIZE_REACHED);
+        }
+        int newSize = next.getAsInt();
+        return database.query(c -> islands.updateSize(c, island.id(), island.region().size(), newSize))
+                .thenApply(updated -> {
+                    if (!updated) {
+                        // Alguém expandiu antes: o cache pode estar velho; a próxima leitura vem do banco.
+                        byOwner.remove(island.owner());
+                        throw new IslandException(IslandException.Reason.EXPANSION_CONFLICT);
+                    }
+                    Island expanded = new Island(
+                            island.id(), island.owner(), island.slot(), island.region().withSize(newSize), island.state());
+                    byOwner.put(expanded.owner(), expanded);
+                    notifyListeners(l -> l.onIslandExpanded(expanded));
+                    return expanded;
+                });
+    }
+
+    /** Nível de expansão atual (1 = inicial) de uma ilha. */
+    public int levelOf(Island island) {
+        return expansion.levelOf(island.region().size());
     }
 
     /**

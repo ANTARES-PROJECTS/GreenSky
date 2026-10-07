@@ -105,6 +105,12 @@ public final class IslandProtectionService implements IslandListener {
         }
     }
 
+    /** A região nova vale na hora: o índice troca a região da ilha. */
+    @Override
+    public void onIslandExpanded(Island island) {
+        index.put(island);
+    }
+
     @Override
     public void onMemberAdded(IslandMember member) {
         Map<UUID, IslandMember> mine = memberships.get(member.playerId());

@@ -74,6 +74,21 @@ public final class IslandRepository {
     }
 
     /**
+     * Troca o tamanho só se ainda for o esperado (trava otimista): de duas expansões
+     * simultâneas a partir do mesmo tamanho, apenas uma altera a linha.
+     *
+     * @return true se esta chamada alterou o tamanho
+     */
+    public boolean updateSize(Connection c, UUID id, int expectedSize, int newSize) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("UPDATE islands SET size = ? WHERE id = ? AND size = ?")) {
+            ps.setInt(1, newSize);
+            ps.setObject(2, id);
+            ps.setInt(3, expectedSize);
+            return ps.executeUpdate() == 1;
+        }
+    }
+
+    /**
      * @throws IslandException ALREADY_MEMBER se o jogador já é membro
      */
     public void addMember(Connection c, UUID islandId, UUID player, IslandRole role, Set<IslandPermission> permissions)

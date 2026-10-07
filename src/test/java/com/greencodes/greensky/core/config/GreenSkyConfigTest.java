@@ -25,6 +25,22 @@ class GreenSkyConfigTest {
         assertEquals(100, config.islands().baseY());
         assertEquals("greensky_world", config.world().name());
         assertEquals(5432, config.database().port());
+        assertEquals(java.util.List.of(100, 150, 200, 300, 500), config.expansion().levels());
+    }
+
+    @Test
+    void invalidExpansionLevelsAreRejected() throws Exception {
+        YamlConfiguration yaml = defaults();
+        yaml.set("islands.expansion-levels", java.util.List.of(100, 2000));
+        ConfigException e = assertThrows(ConfigException.class, () -> GreenSkyConfig.load(yaml));
+        assertTrue(e.getMessage().contains("max-size"), e.getMessage());
+
+        yaml.set("islands.expansion-levels", java.util.List.of("cem", "duzentos"));
+        assertThrows(ConfigException.class, () -> GreenSkyConfig.load(yaml));
+
+        yaml.set("islands.expansion-levels", null);
+        e = assertThrows(ConfigException.class, () -> GreenSkyConfig.load(yaml));
+        assertTrue(e.getMessage().contains("islands.expansion-levels"), e.getMessage());
     }
 
     @Test

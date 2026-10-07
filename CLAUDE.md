@@ -27,9 +27,10 @@ Plugin Paper de um SkyBlock RPG. Visão completa do jogo: `README.md — GreenSk
 - [x] Fase 3 — World
 - [x] Fase 4 — Islands
 - [x] Fase 5 — Protection
+- [x] Fase 6 — Expansion
 - [ ] Compat — ViaVersion/ViaBackwards (planejado abaixo, não implementado)
-- [ ] Fase 6 — Expansion (próxima; **aguarda aprovação**)
-- [ ] 7 First Playable · 8+ conteúdo
+- [ ] Fase 7 — First Playable (próxima; **aguarda aprovação**)
+- [ ] 8+ conteúdo
 
 Regra: implementar **somente a fase aprovada**, uma por vez. Cada fase termina compilando, testada, rodando no Paper de teste, e com um commit.
 
@@ -64,6 +65,7 @@ island/                 # Island, IslandRegion (espiral de slots), IslandMember/
                         # IslandBuilder (interface) + StarterIslandBuilder (ilha por código), IslandCommand
 protection/             # IslandIndex (índice espacial em memória), IslandProtectionService (decisões, sem Bukkit),
                         # PlayerProtectionListener, WorldProtectionListener, ProtectionSessionListener, DenyNotifier
+border/                 # IslandBorderService (WorldBorder por jogador, só visual) + IslandBorderListener
 resources/db/migration/ # V1__players.sql, V2__islands.sql (Flyway)
 tools/e2e/              # teste de ponta a ponta com bots reais (mineflayer); node_modules ignorado
 ```
@@ -75,6 +77,11 @@ Proteção (fase 5): regras em `IslandProtectionService`; listeners só traduzem
 - Pérola/fruta do coro só levam a ilhas das quais o jogador é membro.
 - Bypass: permissão `greensky.admin.bypass` (op).
 - `IslandService` avisa a proteção por `IslandListener` depois de gravar no banco; participações carregam no join.
+
+Expansão (fase 6): níveis em `islands.expansion-levels` (começa em `initial-size`, crescente, até `max-size`).
+Só muda `islands.size` (mesmo centro; nada é regenerado). `UPDATE ... WHERE size = <antigo>` garante que de
+duas expansões simultâneas só uma vale (`EXPANSION_CONFLICT`). `onIslandExpanded` atualiza o índice da
+proteção e a borda de quem está na ilha. Hoje só por `/is admin expand <nick>` (sem custo; economia é fase 15).
 
 Teste com bots (servidor de teste precisa de `online-mode=false` e `server-ip=127.0.0.1` em `run/server.properties`; **nunca em produção**):
 ```bash
@@ -118,7 +125,8 @@ Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos
 - Comandos de console no teste: `execute in minecraft:greensky_world run forceload add X Z` antes de `execute ... if block`; `if block` não leva `run`.
 - `TeleportCause.CHORUS_FRUIT` está deprecated para remoção; usar `CONSUMABLE_EFFECT`.
 - `getOfflinePlayer(String)` pode consultar a Mojang (rede); em comandos use `getOfflinePlayerIfCached`.
-- Config: toda chave é obrigatória (`requireInt`/`requireString`); chave nova sem valor no config.yml do usuário impede o boot com mensagem clara.
+- Config: o `getConfig()` do Bukkit usa o `config.yml` do jar como padrão, então **chave ausente recebe o valor padrão** (não 0). `requireInt`/`requireString`/`requireIntList` pegam **tipo errado** (que antes caía no padrão em silêncio). Os testes de config não têm esses padrões; lá chave ausente vira erro.
+- Borda por jogador: `Server#createWorldBorder` + `Player#setWorldBorder(null)` volta à borda do mundo. O centro é `min + size/2` (a região é `[min, min+size)`).
 - Água no Minecraft corre só na direção da queda mais próxima (até 4 blocos): testes de fluido precisam de piso largo.
 - Lacunas conhecidas da proteção (não cobertas): pegar/dropar itens por visitantes, PvP, dano de mobs a entidades, barcos colocados em água, projéteis acionando botões/alvos, laço/vara de pesca puxando entidades, endermen dentro da ilha. Visitantes não podem nem abrir portas (decisão: configurável na fase social).
 - Corrida no join: se um membro for adicionado enquanto as participações carregam, ele fica sem acesso até reentrar (erra para negar).

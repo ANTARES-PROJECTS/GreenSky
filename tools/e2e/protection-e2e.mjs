@@ -17,7 +17,8 @@ const JAR = process.env.PAPER_JAR ?? 'paper-26.1.2-74.jar';
 const JAVA = process.env.JAVA ?? 'java';
 const WORLD = 'minecraft:greensky_world';
 const BASE_Y = 100; // islands.base-y
-const HALF = 50; // islands.initial-size / 2
+const LEVELS = [100, 150, 200, 300, 500]; // islands.expansion-levels
+let HALF = 50; // metade do tamanho atual da ilha; lido do /island info
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = createWriteStream(resolve(RUN_DIR, 'e2e.log'));
@@ -75,9 +76,17 @@ function connect(name) {
   return new Promise((resolveFn, reject) => {
     const bot = mineflayer.createBot({ host: '127.0.0.1', port: 25565, username: name, version: '26.1.2', auth: 'offline' });
     bot.messages = [];
+    bot.borders = [];
     bot.on('messagestr', (m) => {
       bot.messages.push(m);
       log.write(`[${name}] ${m}\n`);
+    });
+    // Pacotes de borda do mundo que chegam ao cliente (a borda por jogador é só visual).
+    bot._client.on('packet', (data, meta) => {
+      if (meta.name.includes('border')) {
+        bot.borders.push({ name: meta.name, data });
+        log.write(`[${name}] pacote ${meta.name} ${JSON.stringify(data)}\n`);
+      }
     });
     bot.once('spawn', () => resolveFn(bot));
     bot.once('error', reject);
@@ -137,6 +146,20 @@ async function canOpen(bot, x, y, z) {
   return false;
 }
 
+/** Última borda recebida pelo cliente: centro e diâmetro, seja qual for o pacote que os trouxe. */
+function lastBorder(bot) {
+  let x;
+  let z;
+  let size;
+  for (const { data } of bot.borders) {
+    if (data.x !== undefined) x = data.x;
+    if (data.z !== undefined) z = data.z;
+    const d = data.newDiameter ?? data.diameter ?? data.size;
+    if (d !== undefined) size = d;
+  }
+  return size === undefined ? null : { x, z, size };
+}
+
 // ---------- roteiro ----------
 async function main() {
   await waitLine(/Done \(/, 180000);
@@ -155,7 +178,9 @@ async function main() {
   const [, cxs, czs] = info.match(/centro (-?\d+), (-?\d+)/);
   const cx = Number(cxs);
   const cz = Number(czs);
-  console.log(`Ilha da Alice: centro ${cx}, ${cz}`);
+  const size = Number(info.match(/tamanho (\d+)/)[1]);
+  HALF = size / 2;
+  console.log(`Ilha da Alice: centro ${cx}, ${cz}, tamanho ${size}`);
   const p = alice.entity.position;
   check('create/home: Alice está sobre a própria ilha', Math.abs(p.x - cx) < 3 && Math.abs(p.z - cz) < 3 && p.y > BASE_Y,
     `pos ${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}`);
@@ -265,6 +290,43 @@ async function main() {
   await sleep(1500);
   check('pistão: não empurra para fora', await isBlock(edgeIn, BASE_Y + 1, cz - 45, 'dirt')
     && await isBlock(edgeOut, BASE_Y + 1, cz - 45, 'air'));
+
+  // --- Fase 6: expansão ---
+  // Borda visual: dentro da ilha, Alice recebe uma borda do tamanho da região, centrada na ilha.
+  await moveTo(alice, cx, BASE_Y + 1, cz);
+  await sleep(1000);
+  const border = lastBorder(alice);
+  check('borda: tamanho e centro da região', border && border.size === size && border.x === cx && border.z === cz,
+    JSON.stringify(border));
+
+  const next = LEVELS.find((l) => l > size);
+  if (!next) {
+    console.log(`(expansão não testada: a ilha já está no nível máximo ${size}; apague a ilha da Alice para repetir)`);
+  } else {
+    const spot = cx + HALF + 3; // 3 blocos além da borda atual, dentro do próximo nível
+    await inWorld(`fill ${spot - 3} ${BASE_Y} ${cz - 3} ${spot + 3} ${BASE_Y} ${cz + 3} minecraft:stone`);
+    await inWorld(`fill ${spot - 3} ${BASE_Y + 1} ${cz - 3} ${spot + 3} ${BASE_Y + 2} ${cz + 3} minecraft:air`);
+    await moveTo(alice, spot, BASE_Y + 1, cz);
+    await place(alice, spot + 1, BASE_Y + 1, cz);
+    check('expansão: antes, fora da região é negado até ao dono', await isBlock(spot + 1, BASE_Y + 1, cz, 'air'));
+    check('borda: fora de ilha volta à borda normal', (lastBorder(alice)?.size ?? 0) > next,
+      JSON.stringify(lastBorder(alice)));
+
+    const expanded = waitLine(/expandida para|tamanho máximo|expandida por outra/);
+    cmd('island admin expand Alice');
+    check('expansão: comando de admin', (await expanded).includes(`expandida para ${next}x${next}`));
+    await sleep(1500);
+    await place(alice, spot + 1, BASE_Y + 1, cz);
+    check('expansão: área nova liberada para o dono', await isBlock(spot + 1, BASE_Y + 1, cz, 'dirt'));
+    const grown = lastBorder(alice);
+    check('expansão: borda cresce na hora, mesmo centro', grown && grown.size === next && grown.x === cx && grown.z === cz,
+      JSON.stringify(grown));
+    const info2 = await say(alice, '/island info', /centro/);
+    check('expansão: ilha não se moveu', info2.includes(`centro ${cx}, ${cz}`) && info2.includes(`tamanho ${next}`), info2);
+
+    await place(bob, cx - 2, BASE_Y + 1, cz - 1);
+    check('expansão: visitante continua bloqueado', await isBlock(cx - 2, BASE_Y + 1, cz - 1, 'air'));
+  }
 
   alice.quit();
   bob.quit();

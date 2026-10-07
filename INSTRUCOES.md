@@ -5,7 +5,7 @@ Registro de cada alteração, por fase, com o motivo. Pasta do projeto: `C:\User
 ## Resumo
 
 GreenSky é um plugin para **Paper 26.1.2 (build 74, STABLE)** com **Java 25**, **Gradle 9.8.0**
-(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 a 5 (Core, Database, World, Islands, Protection); as fases 1 a 3 foram feitas
+(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 a 6 (Core, Database, World, Islands, Protection, Expansion); as fases 1 a 3 foram feitas
 na 26.2 e migradas para a 26.1.2 depois (ver "Troca de versão").
 Três commits, 21 testes automatizados, tudo validado rodando num Paper de teste.
 
@@ -166,6 +166,39 @@ de teste (`run/`). O nome gravado de `tester1` saiu em minúsculas; só afeta ex
 
 ---
 
+## Fase 6 — Expansion
+
+**APIs conferidas na jar 26.1.2:** `Server#createWorldBorder`, `WorldBorder#setCenter/setSize/setWarningDistance`,
+`Player#setWorldBorder/getWorldBorder`, eventos de join, teleporte, troca de mundo e respawn.
+
+**O que foi feito:**
+- Config `islands.expansion-levels: [100, 150, 200, 300, 500]` (`ExpansionSettings`), validada: começa em
+  `initial-size`, estritamente crescente, último nível até `max-size` (preserva a garantia de não sobreposição).
+- `IslandService.expand`: sobe um nível mantendo o centro. Não regenera nada (mundo void). Uma `UPDATE`
+  condicional no tamanho antigo garante que só uma de duas expansões simultâneas vale; a outra recebe
+  `EXPANSION_CONFLICT` e o cache é descartado. Não há o que recuperar após crash (ou a linha mudou, ou não).
+- `IslandListener.onIslandExpanded`: a proteção troca a região no índice na hora; a borda de quem está na ilha cresce.
+- `border/IslandBorderService` + `IslandBorderListener`: WorldBorder por jogador, só visual, do tamanho da região;
+  fora de ilhas o jogador vê a borda normal. Atualiza em join, teleporte, troca de mundo, respawn e expansão.
+- Comando `/is admin expand <nick>`; `/is info` mostra o nível. Sem custo e sem comando de jogador ainda
+  (precisa da economia, fase 15).
+
+**Testes:** 69 no total. Novos: `ExpansionSettingsTest` (3), 1 em `GreenSkyConfigTest`, 1 em
+`IslandProtectionServiceTest` (área nova liberada na hora) e 3 em `IslandServiceIT` (todos os níveis até o
+máximo mantendo o centro; 8 expansões simultâneas = 1 aplicada; objeto antigo não pula nível).
+
+**Teste com bots:** 30/30 em duas execuções (100 -> 150 e 150 -> 200). Novos checks: borda recebida pelo
+cliente (pacotes reais `world_border_size`/`world_border_center`) com tamanho e centro da região; fora da ilha
+volta à borda normal; antes da expansão o dono não constrói 3 blocos além da borda, depois constrói; a borda
+cresce na hora com o mesmo centro; a ilha não se move; visitante continua bloqueado.
+
+**Correção de uma afirmação minha (Fase 5):** eu disse que uma chave ausente no config.yml "virava 0 em
+silêncio". Testando a atualização no servidor real, o plugin subiu sem `expansion-levels` no config.yml antigo:
+o `getConfig()` do Bukkit usa o config.yml de dentro do jar como padrão. Então chave ausente recebe o padrão.
+O `requireInt` continua útil para **tipo errado**, que antes caía no padrão em silêncio.
+
+---
+
 ## Fase 5 — Protection
 
 **APIs conferidas na jar 26.1.2:** as 27 classes de evento usadas existem. `TeleportCause.CHORUS_FRUIT` está
@@ -261,7 +294,8 @@ cd run && java -jar paper-26.1.2-74.jar --nogui
 
 ## Pendências
 
-- **Fase 6 (Expansion)** aguardando sua aprovação.
+- **Fase 7 (First Playable)** aguardando sua aprovação.
+- Expansão por jogador (com custo) depende da economia.
 - Teste com bots cobre create/home/info/add/remove; falta um teste manual com cliente Minecraft de verdade.
 - `verifyVoid()` avisa se o chunk 0,0 tem blocos (no `run/` há um bloco de ouro de teste); em produção o slot 0 é reservado, então o chunk fica vazio.
 - Decidir se o mundo `world` padrão usará o gerador void via `bukkit.yml`.

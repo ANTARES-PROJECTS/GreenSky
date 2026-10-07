@@ -9,7 +9,11 @@ public final class IslandException extends RuntimeException {
         NOT_OWNER,
         ALREADY_MEMBER,
         NOT_A_MEMBER,
-        CANNOT_REMOVE_OWNER
+        CANNOT_REMOVE_OWNER,
+        /** A ilha já está no último nível de expansão. */
+        MAX_SIZE_REACHED,
+        /** Outra expansão da mesma ilha terminou antes desta; nada foi alterado. */
+        EXPANSION_CONFLICT
     }
 
     private final Reason reason;

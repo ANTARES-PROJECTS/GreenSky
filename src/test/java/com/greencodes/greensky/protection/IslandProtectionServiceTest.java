@@ -131,6 +131,17 @@ class IslandProtectionServiceTest {
     }
 
     @Test
+    void expansionUnlocksTheNewAreaImmediately() {
+        assertFalse(service.can(alice, IslandPermission.BUILD, 1260, 0)); // fora dos 100x100
+        Island grown = new Island(aliceIsland.id(), alice, 1, aliceIsland.region().withSize(150), IslandState.READY);
+        service.onIslandExpanded(grown);
+        assertTrue(service.can(alice, IslandPermission.BUILD, 1260, 0));
+        assertTrue(service.sameIsland(1200, 0, 1270, 0));
+        assertFalse(service.can(alice, IslandPermission.BUILD, 1275, 0)); // fora dos 150x150
+        assertFalse(service.can(bob, IslandPermission.BUILD, 1260, 0)); // visitante continua sem acesso
+    }
+
+    @Test
     void sameIslandOnlyWhenBothPointsShareAnIsland() {
         assertTrue(service.sameIsland(1200, 0, 1210, 20));
         assertFalse(service.sameIsland(1200, 0, 1200, 1200)); // ilhas diferentes

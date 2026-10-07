@@ -9,6 +9,9 @@ islands:
   spacing-margin: 100   # folga mínima entre áreas de ilhas vizinhas
   base-y: 100           # altura da superfície da ilha inicial
   starter-radius: 4     # raio do disco da ilha inicial (diâmetro deve caber em initial-size)
+  # Tamanho (lado) de cada nível de expansão. Começa em initial-size, cresce sempre, até max-size.
+  # A ilha nunca se move: só a área liberada aumenta, a partir do mesmo centro.
+  expansion-levels: [100, 150, 200, 300, 500]
 
 database:
   host: 127.0.0.1

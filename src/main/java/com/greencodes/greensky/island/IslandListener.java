@@ -12,6 +12,9 @@ public interface IslandListener {
     /** Ilha criada (linha já gravada; os blocos ainda podem estar sendo gerados). */
     default void onIslandCreated(Island island, IslandMember owner) {}
 
+    /** A região da ilha cresceu (mesmo centro, tamanho maior). */
+    default void onIslandExpanded(Island island) {}
+
     default void onMemberAdded(IslandMember member) {}
 
     default void onMemberRemoved(UUID islandId, UUID playerId) {}
