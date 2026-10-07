@@ -1,0 +1,12 @@
+# GreenSky - configuração principal.
+# Regra validada no boot: spacing > max-size + spacing-margin.
+# Se não passar, o plugin NÃO sobe.
+
+islands:
+  initial-size: 100     # tamanho inicial da ilha (blocos)
+  max-size: 1000        # maior tamanho que uma ilha pode atingir
+  spacing: 1200         # distância centro a centro entre ilhas
+  spacing-margin: 100   # folga mínima entre áreas de ilhas vizinhas
+
+performance:
+  max-entities-per-island: 500

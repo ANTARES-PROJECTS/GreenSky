@@ -1,0 +1,6 @@
+name: GreenSky
+version: '${version}'
+main: com.greencodes.greensky.GreenSkyPlugin
+api-version: '26.2'
+description: SkyBlock RPG vivo, explorável e social.
+authors: [GreenCodes]
