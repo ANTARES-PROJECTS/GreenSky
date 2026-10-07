@@ -12,8 +12,8 @@ repositories {
 }
 
 dependencies {
-    // Build exato e STABLE (Fill API: 26.2 build 132). Nunca usar build.+
-    compileOnly("io.papermc.paper:paper-api:26.2.build.132-stable")
+    // Paper 26.1.2 build 74 (STABLE). Build exato; nunca usar build.+
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.74-stable")
 
     // Embutidas no jar (shade) para o boot nao depender de internet.
     implementation("com.zaxxer:HikariCP:7.1.0")
@@ -21,7 +21,7 @@ dependencies {
     implementation("org.flywaydb:flyway-core:13.9.0")
     implementation("org.flywaydb:flyway-database-postgresql:13.9.0")
 
-    testImplementation("io.papermc.paper:paper-api:26.2.build.132-stable")
+    testImplementation("io.papermc.paper:paper-api:26.1.2.build.74-stable")
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -34,7 +34,7 @@ java {
 tasks {
     compileJava {
         options.encoding = "UTF-8"
-        options.release.set(25)
+        options.release.set(25)  // Paper 26.1+ exige Java 25
     }
     processResources {
         val props = mapOf("version" to project.version)
