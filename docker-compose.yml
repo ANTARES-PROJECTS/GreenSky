@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: greensky-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${GREENSKY_DB_NAME:-greensky}
+      POSTGRES_USER: ${GREENSKY_DB_USER:-greensky}
+      POSTGRES_PASSWORD: ${GREENSKY_DB_PASSWORD:?defina GREENSKY_DB_PASSWORD no .env (veja .env.example)}
+    ports:
+      # Somente loopback: o banco nao fica exposto na rede.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # PostgreSQL 18+: o volume monta em /var/lib/postgresql (nao em /data).
+      - greensky-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  greensky-pgdata:

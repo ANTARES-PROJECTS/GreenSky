@@ -8,5 +8,13 @@ islands:
   spacing: 1200         # distância centro a centro entre ilhas
   spacing-margin: 100   # folga mínima entre áreas de ilhas vizinhas
 
+database:
+  host: 127.0.0.1
+  port: 5432
+  name: greensky
+  user: greensky
+  pool-size: 10
+  # A senha NUNCA fica aqui: use a variável de ambiente GREENSKY_DB_PASSWORD.
+
 performance:
   max-entities-per-island: 500
