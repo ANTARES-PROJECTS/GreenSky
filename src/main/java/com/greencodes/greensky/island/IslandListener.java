@@ -15,6 +15,8 @@ public interface IslandListener {
     /** A região da ilha cresceu (mesmo centro, tamanho maior). */
     default void onIslandExpanded(Island island) {}
 
+    default void onVisibilityChanged(Island island, IslandVisibility visibility) {}
+
     default void onMemberAdded(IslandMember member) {}
 
     default void onMemberRemoved(UUID islandId, UUID playerId) {}

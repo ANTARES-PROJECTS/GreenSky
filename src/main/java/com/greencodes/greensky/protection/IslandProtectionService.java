@@ -67,6 +67,24 @@ public final class IslandProtectionService implements IslandListener {
         return memberAt(player, x, z).isPresent();
     }
 
+    /** O jogador (online, participações carregadas) é dono ou membro dessa ilha? */
+    public boolean isMemberOf(UUID player, UUID islandId) {
+        Map<UUID, IslandMember> mine = memberships.get(player);
+        return mine != null && mine.containsKey(islandId);
+    }
+
+    /** Ilha da qual o jogador online é dono, sem consultar o banco (para uso síncrono, ex.: respawn). */
+    public Optional<Island> ownedIsland(UUID player) {
+        Map<UUID, IslandMember> mine = memberships.get(player);
+        if (mine == null) {
+            return Optional.empty();
+        }
+        return mine.values().stream()
+                .filter(m -> m.role() == com.greencodes.greensky.island.IslandRole.OWNER)
+                .findFirst()
+                .flatMap(m -> index.get(m.islandId()));
+    }
+
     /**
      * Os dois pontos estão na mesma ilha? Falso se qualquer um estiver fora de todas as ilhas.
      * Usado para impedir que efeitos (líquidos, pistões, explosões) cruzem fronteiras.

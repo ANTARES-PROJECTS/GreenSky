@@ -79,7 +79,65 @@ class IslandServiceIT {
             new ExpansionSettings(List.of(100, 150, 200, 300, 500)).validateAgainst(SETTINGS);
 
     private static IslandService service(FakeBuilder builder) {
-        return new IslandService(db, new IslandRepository(), new PlayerRepository(), builder, SETTINGS, EXPANSION);
+        return new IslandService(
+                db, new IslandRepository(), new PlayerRepository(), builder, SETTINGS, EXPANSION, IslandVisibility.PUBLIC);
+    }
+
+    @Test
+    void visitRulesFollowVisibilityAndMembership() throws Exception {
+        UUID owner = player();
+        UUID friend = player();
+        UUID stranger = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "host").get(10, TimeUnit.SECONDS);
+        service.addMember(island, owner, friend, "friend5").get(10, TimeUnit.SECONDS);
+
+        // Pública por padrão: qualquer um visita.
+        assertEquals(IslandVisibility.PUBLIC, service.visibility(island).get(10, TimeUnit.SECONDS));
+        assertEquals(island.id(), service.authorizeVisit(stranger, owner).get(10, TimeUnit.SECONDS).id());
+
+        // Privada: só membros (e o dono).
+        service.setVisibility(island, owner, IslandVisibility.PRIVATE).get(10, TimeUnit.SECONDS);
+        assertReason(IslandException.Reason.ISLAND_PRIVATE, service.authorizeVisit(stranger, owner));
+        assertEquals(island.id(), service.authorizeVisit(friend, owner).get(10, TimeUnit.SECONDS).id());
+        assertEquals(island.id(), service.authorizeVisit(owner, owner).get(10, TimeUnit.SECONDS).id());
+
+        // Persistiu: outra instância (sem cache) lê do banco.
+        IslandService fresh = service(new FakeBuilder(0));
+        Island loaded = fresh.findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(IslandVisibility.PRIVATE, fresh.visibility(loaded).get(10, TimeUnit.SECONDS));
+
+        // Só o dono troca.
+        assertReason(IslandException.Reason.NOT_OWNER, service.setVisibility(island, friend, IslandVisibility.PUBLIC));
+        // Quem não tem ilha não pode ser visitado.
+        assertReason(IslandException.Reason.TARGET_HAS_NO_ISLAND, service.authorizeVisit(owner, stranger));
+    }
+
+    @Test
+    void visibilityChangeNotifiesListeners() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        List<IslandVisibility> seen = new java.util.concurrent.CopyOnWriteArrayList<>();
+        service.addListener(new IslandListener() {
+            @Override
+            public void onVisibilityChanged(Island island, IslandVisibility visibility) {
+                seen.add(visibility);
+            }
+        });
+        Island island = service.create(owner, "notify2").get(10, TimeUnit.SECONDS);
+        service.setVisibility(island, owner, IslandVisibility.PRIVATE).get(10, TimeUnit.SECONDS);
+        service.setVisibility(island, owner, IslandVisibility.PUBLIC).get(10, TimeUnit.SECONDS);
+        assertEquals(List.of(IslandVisibility.PRIVATE, IslandVisibility.PUBLIC), seen);
+    }
+
+    @Test
+    void newIslandsUseTheConfiguredDefaultVisibility() throws Exception {
+        UUID owner = player();
+        IslandService privateByDefault = new IslandService(db, new IslandRepository(), new PlayerRepository(),
+                new FakeBuilder(0), SETTINGS, EXPANSION, IslandVisibility.PRIVATE);
+        Island island = privateByDefault.create(owner, "shy").get(10, TimeUnit.SECONDS);
+        // Instância nova com padrão PUBLIC: o valor gravado na criação (PRIVATE) é o que vale.
+        assertEquals(IslandVisibility.PRIVATE, service(new FakeBuilder(0)).visibility(island).get(10, TimeUnit.SECONDS));
     }
 
     @Test

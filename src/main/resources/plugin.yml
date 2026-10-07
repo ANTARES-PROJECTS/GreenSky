@@ -8,7 +8,7 @@ authors: [GreenCodes]
 commands:
   island:
     description: Gerencia a sua ilha
-    usage: /<command> <create|home|info|add|remove>
+    usage: /<command> <create|home|info|visit|public|private|add|remove>
     aliases: [is]
 
 permissions:

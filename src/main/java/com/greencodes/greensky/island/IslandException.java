@@ -13,7 +13,11 @@ public final class IslandException extends RuntimeException {
         /** A ilha já está no último nível de expansão. */
         MAX_SIZE_REACHED,
         /** Outra expansão da mesma ilha terminou antes desta; nada foi alterado. */
-        EXPANSION_CONFLICT
+        EXPANSION_CONFLICT,
+        /** O jogador que se quer visitar não tem ilha. */
+        TARGET_HAS_NO_ISLAND,
+        /** A ilha é privada e quem quer visitar não é membro. */
+        ISLAND_PRIVATE
     }
 
     private final Reason reason;

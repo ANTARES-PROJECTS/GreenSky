@@ -55,6 +55,10 @@ public final class IslandIndex {
         return Optional.empty();
     }
 
+    public Optional<Island> get(UUID islandId) {
+        return Optional.ofNullable(byId.get(islandId));
+    }
+
     public int size() {
         return byId.size();
     }

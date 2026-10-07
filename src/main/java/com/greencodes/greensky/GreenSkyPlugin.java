@@ -18,6 +18,8 @@ import com.greencodes.greensky.protection.IslandProtectionService;
 import com.greencodes.greensky.protection.PlayerProtectionListener;
 import com.greencodes.greensky.protection.ProtectionSessionListener;
 import com.greencodes.greensky.protection.WorldProtectionListener;
+import com.greencodes.greensky.visit.HomeListener;
+import com.greencodes.greensky.visit.VisitorExpeller;
 import com.greencodes.greensky.world.WorldManager;
 import java.util.logging.Level;
 import org.bukkit.command.PluginCommand;
@@ -72,7 +74,8 @@ public final class GreenSkyPlugin extends JavaPlugin {
                 new PlayerRepository(),
                 new StarterIslandBuilder(worldManager.requireLoaded(), scheduler, config.islands()),
                 config.islands(),
-                config.expansion());
+                config.expansion(),
+                config.defaultVisibility());
         IslandCommand islandCommand = new IslandCommand(
                 getServer(), getLogger(), islandService, worldManager.requireLoaded(), config.islands(), scheduler);
 
@@ -90,6 +93,12 @@ public final class GreenSkyPlugin extends JavaPlugin {
                 new IslandBorderService(getServer(), worldManager.requireLoaded(), protection, scheduler);
         islandService.addListener(borders);
         plugins.registerEvents(new IslandBorderListener(borders), this);
+
+        // Visitas e "casa" (fase 7): expulsa visitantes ao ficar privada; renasce na ilha; dica de início.
+        islandService.addListener(new VisitorExpeller(getServer(), worldManager.requireLoaded(), protection, scheduler));
+        plugins.registerEvents(
+                new HomeListener(islandService, protection, worldManager.requireLoaded(), config.islands(), scheduler),
+                this);
         islandService.loadAll().whenComplete((all, error) -> {
             if (error != null) {
                 getLogger().log(Level.SEVERE, "Falha ao carregar as ilhas; a proteção negará tudo.", error);

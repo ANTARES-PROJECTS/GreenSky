@@ -28,9 +28,9 @@ Plugin Paper de um SkyBlock RPG. Visão completa do jogo: `README.md — GreenSk
 - [x] Fase 4 — Islands
 - [x] Fase 5 — Protection
 - [x] Fase 6 — Expansion
+- [x] Fase 7 — First Playable (ciclo completo validado com bots, incluindo restart)
 - [ ] Compat — ViaVersion/ViaBackwards (planejado abaixo, não implementado)
-- [ ] Fase 7 — First Playable (próxima; **aguarda aprovação**)
-- [ ] 8+ conteúdo
+- [ ] Fase 8 — Gameplay (próxima; **aguarda aprovação**). Daqui em diante é conteúdo (seção 162 do README).
 
 Regra: implementar **somente a fase aprovada**, uma por vez. Cada fase termina compilando, testada, rodando no Paper de teste, e com um commit.
 
@@ -66,7 +66,8 @@ island/                 # Island, IslandRegion (espiral de slots), IslandMember/
 protection/             # IslandIndex (índice espacial em memória), IslandProtectionService (decisões, sem Bukkit),
                         # PlayerProtectionListener, WorldProtectionListener, ProtectionSessionListener, DenyNotifier
 border/                 # IslandBorderService (WorldBorder por jogador, só visual) + IslandBorderListener
-resources/db/migration/ # V1__players.sql, V2__islands.sql (Flyway)
+visit/                  # VisitorExpeller (ilha ficou privada -> visitantes ao spawn), HomeListener (renascer na ilha, dica de início)
+resources/db/migration/ # V1__players.sql, V2__islands.sql, V3__island_settings.sql (Flyway)
 tools/e2e/              # teste de ponta a ponta com bots reais (mineflayer); node_modules ignorado
 ```
 
@@ -83,9 +84,15 @@ Só muda `islands.size` (mesmo centro; nada é regenerado). `UPDATE ... WHERE si
 duas expansões simultâneas só uma vale (`EXPANSION_CONFLICT`). `onIslandExpanded` atualiza o índice da
 proteção e a borda de quem está na ilha. Hoje só por `/is admin expand <nick>` (sem custo; economia é fase 15).
 
-Teste com bots (servidor de teste precisa de `online-mode=false` e `server-ip=127.0.0.1` em `run/server.properties`; **nunca em produção**):
+Visitas (fase 7): `/is visit <nick>`, `/is public`, `/is private` (tabela `island_settings`; padrão em
+`islands.default-visibility`). Membros sempre visitam. Ficou privada: visitantes não-membros vão ao spawn.
+Quem morre renasce na própria ilha (sem cama/âncora). Jogador sem ilha recebe a dica `/is create` ao entrar.
+Regra de pacotes: `island` não depende de `protection`/`visit`/`border` (estes dependem de `island`).
+
+Teste com bots (servidor de teste precisa de `online-mode=false` e `server-ip=127.0.0.1` em `run/server.properties`; **nunca em produção**).
+`lib.mjs` = apoio comum; `protection-e2e.mjs` (fases 5-6, 30 checks); `first-playable-e2e.mjs` (fase 7, 19 checks, reinicia o servidor no meio):
 ```bash
-cd tools/e2e && npm install --ignore-scripts && JAVA="$JAVA_HOME/bin/java.exe" node protection-e2e.mjs
+cd tools/e2e && npm install --ignore-scripts && JAVA="$JAVA_HOME/bin/java.exe" npm test
 ```
 
 Comando: `/island` (alias `/is`): `create`, `home`, `info`, `add <online>`, `remove <nome>`, e

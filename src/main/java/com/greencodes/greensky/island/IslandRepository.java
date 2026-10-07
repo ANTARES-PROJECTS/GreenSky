@@ -73,6 +73,26 @@ public final class IslandRepository {
         }
     }
 
+    /** Grava (ou troca) a visibilidade da ilha. */
+    public void setVisibility(Connection c, UUID islandId, IslandVisibility visibility) throws SQLException {
+        String sql = "INSERT INTO island_settings (island_id, visibility) VALUES (?, ?) "
+                + "ON CONFLICT (island_id) DO UPDATE SET visibility = EXCLUDED.visibility, updated_at = now()";
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, islandId);
+            ps.setString(2, visibility.name());
+            ps.executeUpdate();
+        }
+    }
+
+    public Optional<IslandVisibility> visibility(Connection c, UUID islandId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("SELECT visibility FROM island_settings WHERE island_id = ?")) {
+            ps.setObject(1, islandId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? Optional.of(IslandVisibility.valueOf(rs.getString(1))) : Optional.empty();
+            }
+        }
+    }
+
     /**
      * Troca o tamanho só se ainda for o esperado (trava otimista): de duas expansões
      * simultâneas a partir do mesmo tamanho, apenas uma altera a linha.

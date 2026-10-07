@@ -32,6 +32,10 @@ public final class IslandService {
     private final IslandBuilder builder;
     private final IslandSettings settings;
     private final ExpansionSettings expansion;
+    private final IslandVisibility defaultVisibility;
+
+    /** Cache id da ilha -> visibilidade. Atualizado ao trocar; carregado sob demanda. */
+    private final ConcurrentMap<UUID, IslandVisibility> visibilityById = new ConcurrentHashMap<>();
 
     /** Cache dono -> ilha. Só guarda ilhas existentes; atualizado na criação e no estado. */
     private final ConcurrentMap<UUID, Island> byOwner = new ConcurrentHashMap<>();
@@ -44,13 +48,69 @@ public final class IslandService {
             PlayerRepository players,
             IslandBuilder builder,
             IslandSettings settings,
-            ExpansionSettings expansion) {
+            ExpansionSettings expansion,
+            IslandVisibility defaultVisibility) {
         this.database = database;
         this.islands = islands;
         this.players = players;
         this.builder = builder;
         this.settings = settings;
         this.expansion = expansion;
+        this.defaultVisibility = defaultVisibility;
+    }
+
+    public CompletableFuture<IslandVisibility> visibility(Island island) {
+        IslandVisibility cached = visibilityById.get(island.id());
+        if (cached != null) {
+            return CompletableFuture.completedFuture(cached);
+        }
+        return database.query(c -> islands.visibility(c, island.id())).thenApply(found -> {
+            IslandVisibility v = found.orElse(defaultVisibility);
+            visibilityById.put(island.id(), v);
+            return v;
+        });
+    }
+
+    /**
+     * Troca a visibilidade. Apenas o dono pode.
+     *
+     * @throws IslandException NOT_OWNER
+     */
+    public CompletableFuture<Void> setVisibility(Island island, UUID actor, IslandVisibility visibility) {
+        if (!island.owner().equals(actor)) {
+            return denied(IslandException.Reason.NOT_OWNER);
+        }
+        return database.query(c -> {
+            islands.setVisibility(c, island.id(), visibility);
+            return null;
+        }).thenAccept(ignored -> {
+            visibilityById.put(island.id(), visibility);
+            notifyListeners(l -> l.onVisibilityChanged(island, visibility));
+        });
+    }
+
+    /**
+     * Decide se {@code visitor} pode visitar a ilha de {@code targetOwner} e devolve a ilha
+     * pronta para o teleporte. Membros sempre podem; os demais, só se a ilha for pública.
+     *
+     * @throws IslandException TARGET_HAS_NO_ISLAND ou ISLAND_PRIVATE
+     */
+    public CompletableFuture<Island> authorizeVisit(UUID visitor, UUID targetOwner) {
+        return findByOwner(targetOwner).thenCompose(found -> {
+            if (found.isEmpty()) {
+                return denied(IslandException.Reason.TARGET_HAS_NO_ISLAND);
+            }
+            Island island = found.get();
+            return visibility(island).thenCompose(visibility -> {
+                if (visibility == IslandVisibility.PUBLIC) {
+                    return ensureReady(island);
+                }
+                return database.query(c -> islands.findMember(c, island.id(), visitor)).thenCompose(member ->
+                        member.isPresent()
+                                ? ensureReady(island)
+                                : denied(IslandException.Reason.ISLAND_PRIVATE));
+            });
+        });
     }
 
     /**
@@ -103,6 +163,7 @@ public final class IslandService {
                     Island island = new Island(UUID.randomUUID(), owner, slot, region, IslandState.PENDING);
                     islands.insert(c, island);
                     islands.addMember(c, island.id(), owner, IslandRole.OWNER, EnumSet.noneOf(IslandPermission.class));
+                    islands.setVisibility(c, island.id(), defaultVisibility);
                     return island;
                 })
                 .thenCompose(island -> {

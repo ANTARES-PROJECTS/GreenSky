@@ -1,11 +1,13 @@
 package com.greencodes.greensky.core.config;
 
+import com.greencodes.greensky.island.IslandVisibility;
 import org.bukkit.configuration.ConfigurationSection;
 
 /** Configuração tipada e já validada. Imutável; um reload cria uma nova instância. */
 public record GreenSkyConfig(
         IslandSettings islands,
         ExpansionSettings expansion,
+        IslandVisibility defaultVisibility,
         DatabaseSettings database,
         WorldSettings world,
         int maxEntitiesPerIsland) {
@@ -39,6 +41,7 @@ public record GreenSkyConfig(
             return new GreenSkyConfig(
                     islandSettings,
                     new ExpansionSettings(requireIntList(islands, "expansion-levels")).validateAgainst(islandSettings),
+                    visibility(requireString(islands, "default-visibility")),
                     new DatabaseSettings(
                             requireString(database, "host"),
                             requireInt(database, "port"),
@@ -49,6 +52,15 @@ public record GreenSkyConfig(
                     requireInt(performance, "max-entities-per-island"));
         } catch (IllegalArgumentException e) {
             throw new ConfigException(e.getMessage());
+        }
+    }
+
+    private static IslandVisibility visibility(String value) {
+        try {
+            return IslandVisibility.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "islands.default-visibility deve ser public ou private (atual: " + value + ")");
         }
     }
 

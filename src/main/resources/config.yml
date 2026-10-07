@@ -12,6 +12,8 @@ islands:
   # Tamanho (lado) de cada nível de expansão. Começa em initial-size, cresce sempre, até max-size.
   # A ilha nunca se move: só a área liberada aumenta, a partir do mesmo centro.
   expansion-levels: [100, 150, 200, 300, 500]
+  # Visibilidade de ilhas novas: public (qualquer um pode /is visit) ou private (só membros).
+  default-visibility: public
 
 database:
   host: 127.0.0.1

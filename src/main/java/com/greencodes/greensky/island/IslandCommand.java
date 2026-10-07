@@ -26,7 +26,8 @@ import org.bukkit.entity.Player;
  */
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUBCOMMANDS = List.of("create", "home", "info", "add", "remove", "admin");
+    private static final List<String> SUBCOMMANDS =
+            List.of("create", "home", "info", "visit", "public", "private", "add", "remove", "admin");
 
     private final Server server;
     private final Logger logger;
@@ -57,10 +58,14 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "create" -> withPlayer(sender, player -> create(sender, player.getUniqueId(), player.getName(), player));
             case "home" -> withPlayer(sender, player -> home(player));
             case "info" -> withPlayer(sender, player -> info(player));
+            case "visit" -> withPlayer(sender, player -> visit(player, args));
+            case "public" -> withPlayer(sender, player -> setVisibility(player, IslandVisibility.PUBLIC));
+            case "private" -> withPlayer(sender, player -> setVisibility(player, IslandVisibility.PRIVATE));
             case "add" -> withPlayer(sender, player -> add(player, args));
             case "remove" -> withPlayer(sender, player -> remove(player, args));
             case "admin" -> admin(sender, args);
-            default -> send(sender, "Uso: /" + label + " <create|home|info|add|remove>", NamedTextColor.YELLOW);
+            default -> send(sender, "Uso: /" + label + " <create|home|info|visit|public|private|add|remove>",
+                    NamedTextColor.YELLOW);
         }
         return true;
     }
@@ -117,6 +122,43 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                         NamedTextColor.AQUA);
             }
         });
+    }
+
+    private void visit(Player visitor, String[] args) {
+        if (args.length < 2) {
+            send(visitor, "Uso: /is visit <jogador>", NamedTextColor.YELLOW);
+            return;
+        }
+        OfflinePlayer target = server.getOfflinePlayerIfCached(args[1]);
+        if (target == null) {
+            send(visitor, "Jogador '" + args[1] + "' nunca entrou no servidor.", NamedTextColor.RED);
+            return;
+        }
+        service.authorizeVisit(visitor.getUniqueId(), target.getUniqueId()).whenComplete((island, error) -> {
+            if (error != null) {
+                fail(visitor, error);
+            } else {
+                send(visitor, "Visitando a ilha de " + args[1] + ".", NamedTextColor.GREEN);
+                teleportHome(visitor, island);
+            }
+        });
+    }
+
+    private void setVisibility(Player owner, IslandVisibility visibility) {
+        service.findByOwner(owner.getUniqueId())
+                .thenCompose(found -> found.isPresent()
+                        ? service.setVisibility(found.get(), owner.getUniqueId(), visibility)
+                        : java.util.concurrent.CompletableFuture.<Void>failedFuture(
+                                new IslandException(IslandException.Reason.NO_ISLAND)))
+                .whenComplete((ignored, error) -> {
+                    if (error != null) {
+                        fail(owner, error);
+                    } else if (visibility == IslandVisibility.PUBLIC) {
+                        send(owner, "Sua ilha agora é pública: qualquer um pode visitar.", NamedTextColor.GREEN);
+                    } else {
+                        send(owner, "Sua ilha agora é privada: só membros podem visitar.", NamedTextColor.GREEN);
+                    }
+                });
     }
 
     private void add(Player owner, String[] args) {
@@ -241,6 +283,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case CANNOT_REMOVE_OWNER -> "O dono não pode ser removido da própria ilha.";
             case MAX_SIZE_REACHED -> "A ilha já está no tamanho máximo.";
             case EXPANSION_CONFLICT -> "A ilha acabou de ser expandida por outra ação. Tente de novo.";
+            case TARGET_HAS_NO_ISLAND -> "Esse jogador não tem ilha.";
+            case ISLAND_PRIVATE -> "Essa ilha é privada.";
         };
     }
 

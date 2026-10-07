@@ -5,7 +5,7 @@ Registro de cada alteração, por fase, com o motivo. Pasta do projeto: `C:\User
 ## Resumo
 
 GreenSky é um plugin para **Paper 26.1.2 (build 74, STABLE)** com **Java 25**, **Gradle 9.8.0**
-(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 a 6 (Core, Database, World, Islands, Protection, Expansion); as fases 1 a 3 foram feitas
+(wrapper) e **PostgreSQL 18**. Concluídas as fases 1 a 7 (Core, Database, World, Islands, Protection, Expansion, First Playable); as fases 1 a 3 foram feitas
 na 26.2 e migradas para a 26.1.2 depois (ver "Troca de versão").
 Três commits, 21 testes automatizados, tudo validado rodando num Paper de teste.
 
@@ -166,6 +166,43 @@ de teste (`run/`). O nome gravado de `tester1` saiu em minúsculas; só afeta ex
 
 ---
 
+## Fase 7 — First Playable
+
+Objetivo do README (seção 161): entrar -> criar ilha -> construir -> expandir -> visitar -> voltar -> persistir
+-> restart -> continuar. O que faltava era **visitar** e **voltar**; o resto já existia e foi validado junto.
+
+**APIs conferidas na jar 26.1.2:** `PlayerRespawnEvent` (`setRespawnLocation`, `isBedSpawn`, `isAnchorSpawn`,
+`getRespawnReason`), `World#getSpawnLocation`.
+
+**O que foi feito:**
+- `V3__island_settings.sql`: tabela `island_settings` (prevista no README) com a visibilidade; ilhas que já
+  existiam ficam públicas.
+- `islands.default-visibility: public` no config (validado: public/private).
+- `IslandService`: `visibility`, `setVisibility` (só o dono) e `authorizeVisit` (pública: qualquer um;
+  privada: só membros; quem não tem ilha não pode ser visitado). Ilha nova grava a visibilidade padrão.
+- Comandos `/is visit <nick>`, `/is public`, `/is private`.
+- `visit/VisitorExpeller`: ao ficar privada, visitantes não-membros que estão na ilha vão ao spawn do servidor.
+- `visit/HomeListener`: quem morre renasce na própria ilha (cama/âncora têm prioridade), sem consultar o banco
+  (usa as participações já carregadas); quem entra sem ilha recebe "Use /is create".
+- Corrigi um desenho meu durante a fase: o listener de respawn estava no pacote `island`, o que criaria
+  dependência circular com `protection`. Movido para `visit`.
+- "Amigos" (README seção 93) ficou de fora: ainda não há sistema de amigos (fase social).
+
+**Testes:** 74 no total. Novos: 3 em `IslandServiceIT` (regras de visita e persistência da visibilidade,
+notificação, padrão configurado), 1 em `IslandProtectionServiceTest`, 1 em `GreenSkyConfigTest`.
+
+**Teste com bots (`first-playable-e2e.mjs`, 19/19), com um jogador novo a cada execução:** recebe a dica,
+cria a ilha, constrói, a ilha é expandida e ele constrói na área nova (borda de 150), Carol visita a ilha
+pública e não constrói, a ilha fica privada e Carol é avisada e levada ao spawn, nova visita é recusada,
+Erin (membro) visita mesmo privada, o dono morre e renasce na ilha. **Servidor reiniciado** e então: mesma
+ilha (centro e tamanho), sem a dica de novato, blocos continuam, `/is home` e a borda de 150 funcionam, o
+dono constrói, a ilha continua privada e a Erin continua membro e constrói.
+
+As funções de apoio dos testes foram para `tools/e2e/lib.mjs` (subir/reiniciar servidor, bots, conferência
+de blocos); o roteiro de proteção continua passando (30/30) depois da mudança.
+
+---
+
 ## Fase 6 — Expansion
 
 **APIs conferidas na jar 26.1.2:** `Server#createWorldBorder`, `WorldBorder#setCenter/setSize/setWarningDistance`,
@@ -294,7 +331,7 @@ cd run && java -jar paper-26.1.2-74.jar --nogui
 
 ## Pendências
 
-- **Fase 7 (First Playable)** aguardando sua aprovação.
+- **Fase 8 (Gameplay)** aguardando sua aprovação.
 - Expansão por jogador (com custo) depende da economia.
 - Teste com bots cobre create/home/info/add/remove; falta um teste manual com cliente Minecraft de verdade.
 - `verifyVoid()` avisa se o chunk 0,0 tem blocos (no `run/` há um bloco de ouro de teste); em produção o slot 0 é reservado, então o chunk fica vazio.

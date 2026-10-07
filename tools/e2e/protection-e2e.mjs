@@ -1,170 +1,16 @@
-// Teste de ponta a ponta do GreenSky: sobe o Paper de teste (run/), conecta bots reais
-// (mineflayer) e confere no servidor, via console, o efeito de cada ação.
-//
-// Requisitos: run/ com o jar do Paper e o plugin em run/plugins, server.properties com
-// online-mode=false e server-ip=127.0.0.1, PostgreSQL rodando e GREENSKY_DB_PASSWORD no ambiente.
-// Uso:  JAVA=".../java.exe" node protection-e2e.mjs
+// Teste de ponta a ponta da proteção (fase 5) e da expansão (fase 6) com bots reais.
+// Uso:  JAVA=".../java.exe" node protection-e2e.mjs   (requisitos em lib.mjs)
 
-import { spawn } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
-import { resolve } from 'node:path';
-import readline from 'node:readline';
-import mineflayer from 'mineflayer';
-import { Vec3 } from 'vec3';
+import {
+  BASE_Y, LEVELS, Vec3, canOpen, check, cmd, connect, dig, finish, inWorld, isBlock, lastBorder,
+  moveTo, place, say, sleep, startServer, waitLine,
+} from './lib.mjs';
 
-const RUN_DIR = resolve(process.env.RUN_DIR ?? '../../run');
-const JAR = process.env.PAPER_JAR ?? 'paper-26.1.2-74.jar';
-const JAVA = process.env.JAVA ?? 'java';
-const WORLD = 'minecraft:greensky_world';
-const BASE_Y = 100; // islands.base-y
-const LEVELS = [100, 150, 200, 300, 500]; // islands.expansion-levels
 let HALF = 50; // metade do tamanho atual da ilha; lido do /island info
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const log = createWriteStream(resolve(RUN_DIR, 'e2e.log'));
-const results = [];
-
-function check(name, ok, detail = '') {
-  results.push({ name, ok });
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  (' + detail + ')' : ''}`);
-}
-
-// ---------- servidor ----------
-const server = spawn(JAVA, ['-Xmx1G', '-Dstdout.encoding=UTF-8', '-jar', JAR, '--nogui'], {
-  cwd: RUN_DIR,
-  env: process.env,
-});
-const waiters = [];
-readline.createInterface({ input: server.stdout }).on('line', (raw) => {
-  const line = raw.replace(/\x1b\[[0-9;]*m/g, '');
-  log.write(line + '\n');
-  for (const w of [...waiters]) {
-    if (w.re.test(line)) {
-      waiters.splice(waiters.indexOf(w), 1);
-      clearTimeout(w.timer);
-      w.resolve(line);
-    }
-  }
-});
-server.stderr.on('data', (d) => log.write(d));
-
-function waitLine(re, ms = 20000) {
-  return new Promise((resolveFn, reject) => {
-    const w = { re, resolve: resolveFn };
-    w.timer = setTimeout(() => {
-      waiters.splice(waiters.indexOf(w), 1);
-      reject(new Error('timeout esperando ' + re));
-    }, ms);
-    waiters.push(w);
-  });
-}
-const cmd = (c) => server.stdin.write(c + '\n');
-
-/** Pergunta ao servidor (autoridade) qual bloco existe na posição. */
-async function isBlock(x, y, z, block) {
-  const answer = waitLine(/Test (passed|failed)|not loaded|Incorrect|Unknown/);
-  cmd(`execute in ${WORLD} if block ${x} ${y} ${z} minecraft:${block}`);
-  return (await answer).includes('Test passed');
-}
-async function inWorld(c) {
-  cmd(`execute in ${WORLD} run ${c}`);
-  await sleep(300);
-}
-
-// ---------- bots ----------
-function connect(name) {
-  return new Promise((resolveFn, reject) => {
-    const bot = mineflayer.createBot({ host: '127.0.0.1', port: 25565, username: name, version: '26.1.2', auth: 'offline' });
-    bot.messages = [];
-    bot.borders = [];
-    bot.on('messagestr', (m) => {
-      bot.messages.push(m);
-      log.write(`[${name}] ${m}\n`);
-    });
-    // Pacotes de borda do mundo que chegam ao cliente (a borda por jogador é só visual).
-    bot._client.on('packet', (data, meta) => {
-      if (meta.name.includes('border')) {
-        bot.borders.push({ name: meta.name, data });
-        log.write(`[${name}] pacote ${meta.name} ${JSON.stringify(data)}\n`);
-      }
-    });
-    bot.once('spawn', () => resolveFn(bot));
-    bot.once('error', reject);
-    bot.once('kicked', (r) => reject(new Error(`${name} expulso: ${JSON.stringify(r)}`)));
-  });
-}
-async function say(bot, text, expect, ms = 15000) {
-  const start = bot.messages.length;
-  bot.chat(text);
-  const until = Date.now() + ms;
-  while (Date.now() < until) {
-    const found = bot.messages.slice(start).find((m) => expect.test(m));
-    if (found) return found;
-    await sleep(100);
-  }
-  throw new Error(`${bot.username}: sem resposta ${expect} para "${text}". Recebido: ${bot.messages.slice(start)}`);
-}
-async function moveTo(bot, x, y, z) {
-  await inWorld(`tp ${bot.username} ${x + 0.5} ${y} ${z + 0.5}`);
-  await sleep(1500);
-  await bot.waitForChunksToLoad();
-}
-async function place(bot, x, y, z, item = 'dirt') {
-  const held = bot.inventory.items().find((i) => i.name === item);
-  if (!held) throw new Error(`${bot.username} sem ${item}`);
-  await bot.equip(held, 'hand');
-  const below = bot.blockAt(new Vec3(x, y - 1, z));
-  try {
-    await bot.placeBlock(below, new Vec3(0, 1, 0));
-  } catch {
-    // Negado pelo servidor: o mineflayer desiste. O resultado real é conferido no console.
-  }
-  await sleep(800);
-}
-async function dig(bot, x, y, z) {
-  try {
-    await bot.dig(bot.blockAt(new Vec3(x, y, z)), true);
-  } catch {
-    // idem
-  }
-  await sleep(800);
-}
-async function canOpen(bot, x, y, z) {
-  try {
-    const win = await Promise.race([
-      bot.openContainer(bot.blockAt(new Vec3(x, y, z))),
-      sleep(4000).then(() => null),
-    ]);
-    if (win) {
-      win.close();
-      await sleep(300);
-      return true;
-    }
-  } catch {
-    // negado
-  }
-  return false;
-}
-
-/** Última borda recebida pelo cliente: centro e diâmetro, seja qual for o pacote que os trouxe. */
-function lastBorder(bot) {
-  let x;
-  let z;
-  let size;
-  for (const { data } of bot.borders) {
-    if (data.x !== undefined) x = data.x;
-    if (data.z !== undefined) z = data.z;
-    const d = data.newDiameter ?? data.diameter ?? data.size;
-    if (d !== undefined) size = d;
-  }
-  return size === undefined ? null : { x, z, size };
-}
 
 // ---------- roteiro ----------
 async function main() {
-  await waitLine(/Done \(/, 180000);
-  await waitLine(/Prote.+ativa/, 30000).catch(() => {});
-  await sleep(3000);
+  await startServer();
 
   const alice = await connect('Alice');
   const bob = await connect('Bob');
@@ -332,18 +178,9 @@ async function main() {
   bob.quit();
 }
 
-let exitCode = 1;
 try {
   await main();
-  exitCode = results.every((r) => r.ok) ? 0 : 1;
+  await finish();
 } catch (e) {
-  console.error('ERRO:', e.message);
-} finally {
-  const passed = results.filter((r) => r.ok).length;
-  console.log(`\n${passed}/${results.length} verificações passaram.`);
-  await sleep(1000);
-  cmd('stop');
-  await Promise.race([new Promise((r) => server.once('exit', r)), sleep(60000)]);
-  log.end();
-  process.exit(exitCode);
+  await finish(e);
 }

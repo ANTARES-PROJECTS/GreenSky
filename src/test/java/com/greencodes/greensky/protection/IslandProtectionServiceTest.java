@@ -1,5 +1,6 @@
 package com.greencodes.greensky.protection;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -139,6 +140,25 @@ class IslandProtectionServiceTest {
         assertTrue(service.sameIsland(1200, 0, 1270, 0));
         assertFalse(service.can(alice, IslandPermission.BUILD, 1275, 0)); // fora dos 150x150
         assertFalse(service.can(bob, IslandPermission.BUILD, 1260, 0)); // visitante continua sem acesso
+    }
+
+    @Test
+    void ownedIslandAndMembershipLookups() {
+        assertEquals(aliceIsland.id(), service.ownedIsland(alice).orElseThrow().id());
+        assertTrue(service.ownedIsland(bob).isEmpty());
+        assertTrue(service.isMemberOf(alice, aliceIsland.id()));
+        assertFalse(service.isMemberOf(bob, aliceIsland.id()));
+
+        // Ser membro de outra ilha não faz dela "a minha ilha" (respawn vai para a ilha própria).
+        service.onMemberAdded(new IslandMember(aliceIsland.id(), bob, IslandRole.MEMBER, IslandPermission.defaultsForMember()));
+        assertTrue(service.isMemberOf(bob, aliceIsland.id()));
+        assertTrue(service.ownedIsland(bob).isEmpty());
+
+        // A ilha devolvida acompanha a expansão.
+        service.onIslandExpanded(new Island(aliceIsland.id(), alice, 1, aliceIsland.region().withSize(150), IslandState.READY));
+        assertEquals(150, service.ownedIsland(alice).orElseThrow().region().size());
+        service.playerQuit(alice);
+        assertTrue(service.ownedIsland(alice).isEmpty());
     }
 
     @Test

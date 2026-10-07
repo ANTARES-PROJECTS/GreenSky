@@ -29,6 +29,17 @@ class GreenSkyConfigTest {
     }
 
     @Test
+    void defaultVisibilityIsParsedAndValidated() throws Exception {
+        YamlConfiguration yaml = defaults();
+        assertEquals(com.greencodes.greensky.island.IslandVisibility.PUBLIC, GreenSkyConfig.load(yaml).defaultVisibility());
+        yaml.set("islands.default-visibility", "Private");
+        assertEquals(com.greencodes.greensky.island.IslandVisibility.PRIVATE, GreenSkyConfig.load(yaml).defaultVisibility());
+        yaml.set("islands.default-visibility", "amigos");
+        ConfigException e = assertThrows(ConfigException.class, () -> GreenSkyConfig.load(yaml));
+        assertTrue(e.getMessage().contains("default-visibility"), e.getMessage());
+    }
+
+    @Test
     void invalidExpansionLevelsAreRejected() throws Exception {
         YamlConfiguration yaml = defaults();
         yaml.set("islands.expansion-levels", java.util.List.of(100, 2000));
