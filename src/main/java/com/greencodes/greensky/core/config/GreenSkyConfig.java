@@ -27,7 +27,9 @@ public record GreenSkyConfig(
                             islands.getInt("initial-size"),
                             islands.getInt("max-size"),
                             islands.getInt("spacing"),
-                            islands.getInt("spacing-margin")),
+                            islands.getInt("spacing-margin"),
+                            islands.getInt("base-y"),
+                            islands.getInt("starter-radius")),
                     new DatabaseSettings(
                             database.getString("host"),
                             database.getInt("port"),

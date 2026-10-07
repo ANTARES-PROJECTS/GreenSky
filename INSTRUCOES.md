@@ -122,6 +122,50 @@ após restart (positivo em y=100, negativo em y=99).
 
 ---
 
+## Fase 4 — Islands
+
+Feita já na Paper 26.1.2. Decisão minha (você não escolheu): a ilha inicial é **gerada por código**
+atrás da interface `IslandBuilder`, para trocar por template/schematic depois sem mexer no resto.
+
+**APIs conferidas na jar:** `World.getChunkAtAsync`, `Entity.teleportAsync`, `Block.setType(Material, boolean)`,
+`generateTree` (a versão sem `Random` é deprecated; troquei por `generateTree(Location, Random, TreeType)`).
+
+**Banco (`V2__islands.sql`):** sequência `island_slot_seq`, tabelas `islands` (com `state` PENDING/READY e
+índice único por dono), `island_members` e `island_permissions` (cascade). O centro e o tamanho ficam
+gravados, então mudar `spacing` no config não move ilhas existentes.
+
+**Código novo:**
+- `island/IslandRegion`: área da ilha e espiral quadrada de slots (slot 0 = spawn, reservado).
+- `island/Island`, `IslandMember`, `IslandRole` (OWNER/MEMBER), `IslandPermission` (BUILD, BREAK, INTERACT,
+  CONTAINERS, INVITE, KICK, MANAGE_PERMISSIONS), `IslandState`, `IslandException`.
+- `island/IslandRepository`: só SQL, com `Connection` para compor transações.
+- `island/IslandService`: regras, tudo assíncrono, cache dono -> ilha. Criação = transação (slot + linha +
+  dono) -> gera blocos -> READY. Falha no meio deixa PENDING e `ensureReady` refaz.
+- `island/IslandBuilder` + `StarterIslandBuilder`: disco de grama sobre terra afunilando, bedrock no centro,
+  árvore com semente fixa (refazer gera a mesma árvore). Carrega só os chunks do disco.
+- `island/IslandCommand`: `/island` (`/is`): create, home, info, add, remove e `admin create <nick>`.
+- `player/PlayerRepository`: upsert em `players`.
+- Config: `islands.base-y` e `islands.starter-radius` (validados: o diâmetro cabe no tamanho inicial).
+- `plugin.yml`: comando `island` (alias `is`) e permissão `greensky.admin` (op).
+- `build.gradle.kts`: `-Xlint:deprecation` ligado.
+
+**Testes:** 37 no total. Novos: `IslandRegionTest` (8: espiral única e completa, nenhuma sobreposição no
+tamanho máximo, spawn reservado) e `IslandServiceIT` (7, no Postgres real: criação, dono único, 8 criações
+simultâneas do mesmo dono = 1 ilha, 24 donos simultâneos = slots distintos, recuperação de ilha PENDING,
+membros/permissões e regras de autorização).
+
+**Validado no Paper 26.1.2:** `admin create` cria a ilha, a segunda tentativa do mesmo jogador é recusada,
+um segundo jogador ganha outra ilha; depois de um restart a grama, terra, bedrock, árvore (oak_log) e o
+vazio ao redor estão corretos, e o banco mostra as ilhas READY.
+
+**Não testado (precisa de cliente real):** `/is create`, `/is home` (teleportAsync), `/is info`, `/is add|remove`.
+
+**Notas:** os testes de integração consomem números da sequência, por isso as ilhas de teste ficaram em slots
+altos (77 e 79, buracos são normais). As ilhas de teste (`tester1`, `Tester2`) continuam no banco e no mundo
+de teste (`run/`). O nome gravado de `tester1` saiu em minúsculas; só afeta exibição.
+
+---
+
 ## Troca de versão: 26.2 -> 26.1.2 (depois da Fase 3)
 
 **Motivo:** você quis um servidor mais leve para o PC de quem joga. Pesquisei a 1.20.6 (último
@@ -162,8 +206,9 @@ cd run && java -jar paper-26.1.2-74.jar --nogui
 
 ## Pendências
 
-- **Fase 4 (Islands)** aguardando sua aprovação; precisa decidir como gerar a ilha inicial.
-- Ajustar `verifyVoid()` quando a ilha inicial ocupar o chunk 0,0.
+- **Fase 5 (Protection)** aguardando sua aprovação.
+- Testar `/is create|home|info|add|remove` com um cliente real.
+- `verifyVoid()` avisa se o chunk 0,0 tem blocos (no `run/` há um bloco de ouro de teste); em produção o slot 0 é reservado, então o chunk fica vazio.
 - Decidir se o mundo `world` padrão usará o gerador void via `bukkit.yml`.
 - Paper 26.1.2 está sem suporte no Paper: reavaliar 26.2/26.3.
 - Implementar ViaVersion/ViaBackwards (planejado) e testar com clientes reais.

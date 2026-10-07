@@ -7,6 +7,8 @@ islands:
   max-size: 1000        # maior tamanho que uma ilha pode atingir
   spacing: 1200         # distância centro a centro entre ilhas
   spacing-margin: 100   # folga mínima entre áreas de ilhas vizinhas
+  base-y: 100           # altura da superfície da ilha inicial
+  starter-radius: 4     # raio do disco da ilha inicial (diâmetro deve caber em initial-size)
 
 database:
   host: 127.0.0.1

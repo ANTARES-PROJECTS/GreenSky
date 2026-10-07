@@ -35,6 +35,7 @@ tasks {
     compileJava {
         options.encoding = "UTF-8"
         options.release.set(25)  // Paper 26.1+ exige Java 25
+        options.compilerArgs.add("-Xlint:deprecation")
     }
     processResources {
         val props = mapOf("version" to project.version)

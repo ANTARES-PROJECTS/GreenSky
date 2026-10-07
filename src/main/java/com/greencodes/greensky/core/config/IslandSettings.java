@@ -1,12 +1,16 @@
 package com.greencodes.greensky.core.config;
 
 /**
- * Parâmetros de tamanho e espaçamento das ilhas.
+ * Parâmetros de tamanho, espaçamento e ilha inicial.
  *
  * <p>Invariante: {@code spacing > maxSize + spacingMargin}, para que duas ilhas
  * vizinhas nunca se sobreponham, mesmo no tamanho máximo.
+ *
+ * @param baseY altura da superfície (grama) da ilha inicial
+ * @param starterRadius raio do disco da ilha inicial; o diâmetro cabe no tamanho inicial
  */
-public record IslandSettings(int initialSize, int maxSize, int spacing, int spacingMargin) {
+public record IslandSettings(
+        int initialSize, int maxSize, int spacing, int spacingMargin, int baseY, int starterRadius) {
 
     public IslandSettings {
         if (initialSize <= 0) {
@@ -24,6 +28,18 @@ public record IslandSettings(int initialSize, int maxSize, int spacing, int spac
             throw new IllegalArgumentException(
                     "islands.spacing (" + spacing + ") deve ser > islands.max-size (" + maxSize
                             + ") + islands.spacing-margin (" + spacingMargin + ") = " + required);
+        }
+        // Limites verticais do overworld: -64..319. Sobra espaço para 3 camadas abaixo e árvore acima.
+        if (baseY < -50 || baseY > 290) {
+            throw new IllegalArgumentException("islands.base-y deve estar entre -50 e 290 (atual: " + baseY + ")");
+        }
+        if (starterRadius < 1 || starterRadius > 16) {
+            throw new IllegalArgumentException(
+                    "islands.starter-radius deve estar entre 1 e 16 (atual: " + starterRadius + ")");
+        }
+        if (starterRadius * 2 + 1 > initialSize) {
+            throw new IllegalArgumentException("islands.starter-radius (" + starterRadius
+                    + ") não cabe em islands.initial-size (" + initialSize + ")");
         }
     }
 }

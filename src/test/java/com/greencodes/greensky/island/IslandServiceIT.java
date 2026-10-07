@@ -1,0 +1,268 @@
+package com.greencodes.greensky.island;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.greencodes.greensky.core.config.DatabaseSettings;
+import com.greencodes.greensky.core.config.IslandSettings;
+import com.greencodes.greensky.database.Database;
+import com.greencodes.greensky.player.PlayerRepository;
+import java.sql.PreparedStatement;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+
+/** Serviço de ilhas contra PostgreSQL real, com um builder falso (sem mundo Bukkit). */
+@EnabledIfEnvironmentVariable(named = DatabaseSettings.PASSWORD_ENV, matches = ".+")
+class IslandServiceIT {
+
+    private static final IslandSettings SETTINGS = new IslandSettings(100, 1000, 1200, 100, 100, 4);
+
+    private static Database db;
+    private final List<UUID> created = new ArrayList<>();
+
+    @BeforeAll
+    static void open() {
+        DatabaseSettings settings = new DatabaseSettings("127.0.0.1", 5432, "greensky", "greensky", 8);
+        db = Database.open(settings, System.getenv(DatabaseSettings.PASSWORD_ENV),
+                IslandServiceIT.class.getClassLoader());
+    }
+
+    @AfterAll
+    static void close() {
+        db.close();
+    }
+
+    @AfterEach
+    void cleanup() throws Exception {
+        db.transaction(c -> {
+            for (UUID id : created) {
+                exec(c, "DELETE FROM islands WHERE owner_uuid = ?", id);
+                exec(c, "DELETE FROM island_members WHERE player_uuid = ?", id);
+                exec(c, "DELETE FROM players WHERE uuid = ?", id);
+            }
+            return null;
+        }).get(10, TimeUnit.SECONDS);
+        created.clear();
+    }
+
+    private static void exec(java.sql.Connection c, String sql, UUID id) throws java.sql.SQLException {
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setObject(1, id);
+            ps.executeUpdate();
+        }
+    }
+
+    private UUID player() {
+        UUID id = UUID.randomUUID();
+        created.add(id);
+        return id;
+    }
+
+    private static IslandService service(FakeBuilder builder) {
+        return new IslandService(db, new IslandRepository(), new PlayerRepository(), builder, SETTINGS);
+    }
+
+    @Test
+    void createsReadyIslandAndPersistsIt() throws Exception {
+        UUID owner = player();
+        FakeBuilder builder = new FakeBuilder(0);
+        IslandService service = service(builder);
+
+        Island island = service.create(owner, "owner1").get(10, TimeUnit.SECONDS);
+
+        assertTrue(island.isReady());
+        assertEquals(1, builder.builds.get());
+        assertEquals(100, island.region().size());
+
+        // Outra instância do serviço (cache vazio) enxerga a ilha gravada no banco.
+        Island loaded = service(new FakeBuilder(0)).findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(island.id(), loaded.id());
+        assertEquals(island.region(), loaded.region());
+        assertTrue(loaded.isReady());
+
+        List<IslandMember> members = service.members(island.id()).get(10, TimeUnit.SECONDS);
+        assertEquals(1, members.size());
+        assertEquals(IslandRole.OWNER, members.get(0).role());
+        assertTrue(members.get(0).can(IslandPermission.MANAGE_PERMISSIONS));
+    }
+
+    @Test
+    void secondIslandForSameOwnerIsRejected() throws Exception {
+        UUID owner = player();
+        IslandService service = service(new FakeBuilder(0));
+        service.create(owner, "owner2").get(10, TimeUnit.SECONDS);
+
+        assertReason(IslandException.Reason.ALREADY_HAS_ISLAND, service.create(owner, "owner2"));
+    }
+
+    @Test
+    void simultaneousCreationsForSameOwnerYieldExactlyOneIsland() throws Exception {
+        UUID owner = player();
+        FakeBuilder builder = new FakeBuilder(0);
+        IslandService service = service(builder);
+
+        List<CompletableFuture<Island>> attempts = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            attempts.add(service.create(owner, "racer"));
+        }
+        int ok = 0;
+        int rejected = 0;
+        for (CompletableFuture<Island> attempt : attempts) {
+            try {
+                attempt.get(20, TimeUnit.SECONDS);
+                ok++;
+            } catch (ExecutionException e) {
+                assertEquals(IslandException.Reason.ALREADY_HAS_ISLAND, ((IslandException) root(e)).reason());
+                rejected++;
+            }
+        }
+        assertEquals(1, ok);
+        assertEquals(7, rejected);
+        assertEquals(1, builder.builds.get(), "blocos só podem ser gerados para a ilha que existe");
+    }
+
+    @Test
+    void simultaneousCreationsForDifferentPlayersGetDistinctNonOverlappingSlots() throws Exception {
+        IslandService service = service(new FakeBuilder(0));
+        List<CompletableFuture<Island>> all = new ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            all.add(service.create(player(), "p" + i));
+        }
+        List<Island> islands = new ArrayList<>();
+        for (CompletableFuture<Island> f : all) {
+            islands.add(f.get(30, TimeUnit.SECONDS));
+        }
+        Set<Long> slots = new HashSet<>();
+        for (Island island : islands) {
+            assertTrue(slots.add(island.slot()), "slot repetido: " + island.slot());
+        }
+        // Mesmo no tamanho máximo, nenhuma região se sobrepõe a outra.
+        for (int i = 0; i < islands.size(); i++) {
+            for (int j = i + 1; j < islands.size(); j++) {
+                IslandRegion a = islands.get(i).region().withSize(SETTINGS.maxSize());
+                IslandRegion b = islands.get(j).region().withSize(SETTINGS.maxSize());
+                assertFalse(a.overlaps(b));
+            }
+        }
+    }
+
+    @Test
+    void crashedCreationStaysPendingAndIsRecovered() throws Exception {
+        UUID owner = player();
+        FakeBuilder builder = new FakeBuilder(1); // falha na primeira geração
+        IslandService service = service(builder);
+
+        CompletableFuture<Island> failing = service.create(owner, "crash");
+        assertThrows(ExecutionException.class, () -> failing.get(10, TimeUnit.SECONDS));
+
+        // A linha existe, mas ainda não está pronta.
+        IslandService fresh = service(builder);
+        Island pending = fresh.findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(IslandState.PENDING, pending.state());
+
+        // Recuperação: refaz os blocos e marca READY, inclusive no banco.
+        Island recovered = fresh.ensureReady(pending).get(10, TimeUnit.SECONDS);
+        assertTrue(recovered.isReady());
+        Island persisted = service(builder).findByOwner(owner).get(10, TimeUnit.SECONDS).orElseThrow();
+        assertEquals(IslandState.READY, persisted.state());
+        assertEquals(pending.region(), persisted.region());
+    }
+
+    @Test
+    void ownerManagesMembersAndPermissions() throws Exception {
+        UUID owner = player();
+        UUID friend = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "boss").get(10, TimeUnit.SECONDS);
+
+        IslandMember added = service.addMember(island, owner, friend, "friend").get(10, TimeUnit.SECONDS);
+        assertEquals(IslandPermission.defaultsForMember(), added.permissions());
+        assertTrue(added.can(IslandPermission.BUILD));
+        assertFalse(added.can(IslandPermission.KICK));
+
+        assertReason(IslandException.Reason.ALREADY_MEMBER, service.addMember(island, owner, friend, "friend"));
+
+        service.setPermissions(island, owner, friend, EnumSet.of(IslandPermission.INTERACT))
+                .get(10, TimeUnit.SECONDS);
+        IslandMember updated = service.members(island.id()).get(10, TimeUnit.SECONDS).stream()
+                .filter(m -> m.playerId().equals(friend))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(EnumSet.of(IslandPermission.INTERACT), updated.permissions());
+        assertFalse(updated.can(IslandPermission.BUILD));
+
+        service.removeMember(island, owner, friend).get(10, TimeUnit.SECONDS);
+        assertEquals(1, service.members(island.id()).get(10, TimeUnit.SECONDS).size());
+        assertReason(IslandException.Reason.NOT_A_MEMBER, service.removeMember(island, owner, friend));
+    }
+
+    @Test
+    void authorizationRules() throws Exception {
+        UUID owner = player();
+        UUID friend = player();
+        UUID stranger = player();
+        IslandService service = service(new FakeBuilder(0));
+        Island island = service.create(owner, "boss2").get(10, TimeUnit.SECONDS);
+        service.addMember(island, owner, friend, "friend2").get(10, TimeUnit.SECONDS);
+
+        assertReason(IslandException.Reason.NOT_OWNER, service.addMember(island, friend, stranger, "stranger"));
+        assertReason(IslandException.Reason.NOT_OWNER, service.removeMember(island, stranger, friend));
+        assertReason(IslandException.Reason.NOT_OWNER,
+                service.setPermissions(island, friend, friend, EnumSet.allOf(IslandPermission.class)));
+        assertReason(IslandException.Reason.CANNOT_REMOVE_OWNER, service.removeMember(island, owner, owner));
+        assertReason(IslandException.Reason.NOT_A_MEMBER,
+                service.setPermissions(island, owner, owner, EnumSet.of(IslandPermission.BUILD)));
+
+        // Um membro pode sair sozinho.
+        service.removeMember(island, friend, friend).get(10, TimeUnit.SECONDS);
+    }
+
+    private static void assertReason(IslandException.Reason expected, CompletableFuture<?> future) {
+        ExecutionException e = assertThrows(ExecutionException.class, () -> future.get(10, TimeUnit.SECONDS));
+        Throwable root = root(e);
+        assertTrue(root instanceof IslandException, "esperava IslandException, veio: " + root);
+        assertEquals(expected, ((IslandException) root).reason());
+    }
+
+    private static Throwable root(Throwable t) {
+        while ((t instanceof ExecutionException || t instanceof CompletionException) && t.getCause() != null) {
+            t = t.getCause();
+        }
+        return t;
+    }
+
+    /** Builder falso: conta chamadas e pode falhar as N primeiras. */
+    private static final class FakeBuilder implements IslandBuilder {
+        final AtomicInteger builds = new AtomicInteger();
+        private final AtomicInteger failuresLeft;
+
+        FakeBuilder(int failures) {
+            this.failuresLeft = new AtomicInteger(failures);
+        }
+
+        @Override
+        public CompletableFuture<Void> build(IslandRegion region) {
+            if (failuresLeft.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+                return CompletableFuture.failedFuture(new IllegalStateException("crash simulado na geração"));
+            }
+            builds.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
+        }
+    }
+}

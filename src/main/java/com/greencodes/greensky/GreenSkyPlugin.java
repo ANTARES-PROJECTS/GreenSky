@@ -6,7 +6,13 @@ import com.greencodes.greensky.core.config.DatabaseSettings;
 import com.greencodes.greensky.core.config.GreenSkyConfig;
 import com.greencodes.greensky.database.Database;
 import com.greencodes.greensky.database.DatabaseException;
+import com.greencodes.greensky.island.IslandCommand;
+import com.greencodes.greensky.island.IslandRepository;
+import com.greencodes.greensky.island.IslandService;
+import com.greencodes.greensky.island.StarterIslandBuilder;
+import com.greencodes.greensky.player.PlayerRepository;
 import com.greencodes.greensky.world.WorldManager;
+import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class GreenSkyPlugin extends JavaPlugin {
@@ -49,6 +55,18 @@ public final class GreenSkyPlugin extends JavaPlugin {
             abort("Mundo SkyBlock indisponível: " + e.getMessage());
             return;
         }
+
+        IslandService islandService = new IslandService(
+                database,
+                new IslandRepository(),
+                new PlayerRepository(),
+                new StarterIslandBuilder(worldManager.requireLoaded(), scheduler, config.islands()),
+                config.islands());
+        IslandCommand islandCommand = new IslandCommand(
+                getServer(), getLogger(), islandService, worldManager.requireLoaded(), config.islands(), scheduler);
+        PluginCommand command = getCommand("island");
+        command.setExecutor(islandCommand);
+        command.setTabCompleter(islandCommand);
 
         getLogger().info("GreenSky " + getPluginMeta().getVersion() + " habilitado (ilhas: tamanho inicial "
                 + config.islands().initialSize() + ", máx " + config.islands().maxSize()

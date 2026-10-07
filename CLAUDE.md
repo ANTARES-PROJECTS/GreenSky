@@ -25,9 +25,10 @@ Plugin Paper de um SkyBlock RPG. Visão completa do jogo: `README.md — GreenSk
 - [x] Fase 1 — Core
 - [x] Fase 2 — Database
 - [x] Fase 3 — World
+- [x] Fase 4 — Islands
 - [ ] Compat — ViaVersion/ViaBackwards (planejado abaixo, não implementado)
-- [ ] Fase 4 — Islands (próxima; **aguarda aprovação**)
-- [ ] 5 Protection · 6 Expansion · 7 First Playable · 8+ conteúdo
+- [ ] Fase 5 — Protection (próxima; **aguarda aprovação**)
+- [ ] 6 Expansion · 7 First Playable · 8+ conteúdo
 
 Regra: implementar **somente a fase aprovada**, uma por vez. Cada fase termina compilando, testada, rodando no Paper de teste, e com um commit.
 
@@ -56,8 +57,20 @@ core/config/            # GreenSkyConfig + IslandSettings/DatabaseSettings/World
 database/               # Database (Hikari + Flyway + executor async), SqlFunction, DatabaseException
 generation/             # VoidGenerator, SingleBiomeProvider
 world/                  # WorldManager, SkyWorld
-resources/db/migration/ # V1__players.sql (Flyway)
+player/                 # PlayerRepository (upsert em players)
+island/                 # Island, IslandRegion (espiral de slots), IslandMember/Role/Permission,
+                        # IslandRepository (SQL), IslandService (regras, async, cache dono->ilha),
+                        # IslandBuilder (interface) + StarterIslandBuilder (ilha por código), IslandCommand
+resources/db/migration/ # V1__players.sql, V2__islands.sql (Flyway)
 ```
+
+Comando: `/island` (alias `/is`): `create`, `home`, `info`, `add <online>`, `remove <nome>`, e
+`admin create <nick>` (permissão `greensky.admin`, funciona no console).
+
+Ilhas: slot vindo da sequência `island_slot_seq` (começa em 1; slot 0 = origem/spawn, reservado),
+posição em espiral quadrada com `islands.spacing`. Centro e tamanho ficam gravados no banco (mudar
+`spacing` não move ilhas existentes). `state` PENDING/READY: criação grava a linha, gera os blocos e
+só então marca READY; PENDING é refeito por `ensureReady` (usado no `/is home`).
 
 Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos. Sem singleton, sem `static` de estado.
 
@@ -83,6 +96,10 @@ Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos
 - `verifyVoid()` olha o chunk 0,0; na Fase 4 isso vira falso alarme quando a ilha inicial ocupar esse chunk.
 - Paper 26.2 tem NPE ao receber `stop` no console no exato instante do "Done" (bug do servidor).
 - `gradlew` deve ficar com LF (`.gitattributes`).
+- `World.generateTree(Location, TreeType)` é deprecated; usar `generateTree(Location, Random, TreeType)`.
+- Os testes `*IT` consomem a sequência de slots: ilhas de teste ficam em posições altas, com buracos. Normal.
+- Comandos de console no teste: `execute in minecraft:greensky_world run forceload add X Z` antes de `execute ... if block`; `if block` não leva `run`.
+- **Não testado com cliente real:** `/is create`, `/is home` (teleportAsync), `/is info`, `/is add|remove`. Só o caminho `admin create` e o serviço foram exercitados (sem Player).
 
 ## Plano ViaVersion (clientes 1.21.x entrarem no servidor 26.1.2)
 
@@ -94,6 +111,6 @@ Não implementado. Só plugins na pasta `plugins/` do servidor, sem código do G
 
 ## Decisões em aberto
 
-- Como gerar a ilha inicial (template/schematic/código) — decidir na Fase 4.
+- Ilha inicial hoje é por código (disco + árvore). Trocar por template/schematic implementando `IslandBuilder`.
 - Apontar o mundo `world` padrão para o gerador void via `bukkit.yml` (não testado).
 - Versão do Paper para produção: a 26.1.2 está sem suporte no Paper; reavaliar (26.2 STABLE, ou 26.3 quando STABLE).
