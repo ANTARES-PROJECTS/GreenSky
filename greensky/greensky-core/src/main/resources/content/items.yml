@@ -1,0 +1,19 @@
+# Itens do GreenSky. A identidade do item é o id (gravado escondido no item), nunca o nome ou a
+# lore. PROVISÓRIO: as próximas etapas adicionam os itens reais (peixes, sementes, relíquias...).
+#
+# Formato:
+#   items:
+#     <id.unico>:
+#       material: <Material do Minecraft, ex.: COD, HEART_OF_THE_SEA>
+#       name: "Nome exibido"
+#       rarity: COMMON|UNCOMMON|RARE|EPIC|LEGENDARY|MYTHIC|SECRET
+#       lore: ["linha 1", "linha 2"]   (opcional)
+
+items:
+  relic.heart_of_ancient_forest:
+    material: HEART_OF_THE_SEA
+    name: "Heart of the Ancient Forest"
+    rarity: MYTHIC
+    lore:
+      - "Pulsa com a força da floresta antiga."
+      - "Dizem que a primeira ilha nasceu dele."

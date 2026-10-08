@@ -1,153 +1,197 @@
 # CLAUDE.md — GreenSky
 
-Plugin Paper de um SkyBlock RPG. Visão completa do jogo: `README.md — GreenSky.md` (fora do repo, em Downloads). Este arquivo guia o trabalho técnico.
+Plugin Paper de um SkyBlock RPG. A visão completa do jogo está no [README.md](README.md); o histórico de cada
+alteração, no [INSTRUCOES.md](INSTRUCOES.md). Este arquivo tem as regras de trabalho.
 
-## Versões alvo (fixas)
+## Estrutura
+
+```
+green-sky/
+├── README.md            # visão do jogo (fonte das fases e regras)
+├── CLAUDE.md            # este arquivo
+├── INSTRUCOES.md        # histórico do que foi feito, fase a fase
+├── greensky/            # projeto Gradle (wrapper: greensky/gradlew)
+│   ├── greensky-api/    # contratos públicos (vazio por enquanto)
+│   ├── greensky-core/   # o plugin (todo o código)
+│   └── tools/e2e/       # testes com bots reais (mineflayer)
+├── server/              # Paper de teste: jar, plugins/, configs, mundo
+├── libs/                # jars externos, só para compilar contra eles
+├── docker-compose.yml   # PostgreSQL (lê .env)
+├── .env / .env.example  # GREENSKY_DB_PASSWORD (o .env nunca vai para o git)
+├── build.bat            # compila, testa e copia o jar para server/plugins
+└── start-server.bat     # sobe PostgreSQL + Paper de teste
+```
+
+## Versões (fixas)
 
 | Item | Versão |
 |---|---|
-| Paper (servidor) | **26.1.2 build 74** (canal STABLE, `paper-26.1.2-74.jar`, SHA256 `1d70b1da…95e5f7`) |
+| Paper | **26.1.2 build 74** (STABLE), `server/paper-26.1.2-74.jar` |
 | paper-api | `io.papermc.paper:paper-api:26.1.2.build.74-stable` (nunca `build.+`) |
-| Java | **25** (Temurin 25.0.4.1, obrigatório desde o Paper 26.1) |
-| Gradle | 9.8.0, **somente via wrapper** (`./gradlew`), Kotlin DSL |
-| PostgreSQL | 18 (`postgres:18-alpine`, via docker-compose) |
-| HikariCP / JDBC / Flyway | 7.1.0 / 42.7.13 / 13.9.0 |
-| Shadow / JUnit | 9.6.1 / 6.1.3 |
+| Java | **25** (Temurin 25.0.4.1 em `C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`; não está no PATH) |
+| Gradle | 9.8.0, **só pelo wrapper** `greensky/gradlew` |
+| PostgreSQL | 18 (`postgres:18-alpine`) |
+| HikariCP / JDBC / Flyway / Shadow / JUnit | 7.1.0 / 42.7.13 / 13.9.0 / 9.6.1 / 6.1.3 |
 
-**Decisão do usuário: usar a 26.1.2** (cliente mais leve que a 26.2/26.3, a confirmar num PC fraco).
-- O Fill API marca a 26.1.2 como **UNSUPPORTED desde 2026-07-26**: não recebe mais builds (o último, 74, é de 2026-07-06). O servidor loga aviso "2 releases behind (26.2)". Aceito conscientemente; reavaliar periodicamente.
-- Paper 26.2 build 132 (STABLE) é a opção suportada; o 26.3 só tem builds BETA.
-- Esquema de versão novo: não existe mais `1.21.x-R0.1-SNAPSHOT` a partir da 26.1. A 1.21.11 (última 1.x) e a 1.20.6 foram descartadas: sem builds novos desde mai/2026 e out/2024.
-- Ambiente de teste antigo (mundos da 26.2 não abrem na 26.1.2) ficou em `run-26.2/` (ignorado pelo git).
-
-## Estado das fases (lista oficial = seções 154–172 do README)
-
-- [x] Fase 1 — Core
-- [x] Fase 2 — Database
-- [x] Fase 3 — World
-- [x] Fase 4 — Islands
-- [x] Fase 5 — Protection
-- [x] Fase 6 — Expansion
-- [x] Fase 7 — First Playable (ciclo completo validado com bots, incluindo restart)
-- [ ] Compat — ViaVersion/ViaBackwards (planejado abaixo, não implementado)
-- [ ] Fase 8 — Gameplay (próxima; **aguarda aprovação**). Daqui em diante é conteúdo (seção 162 do README).
-
-Regra: implementar **somente a fase aprovada**, uma por vez. Cada fase termina compilando, testada, rodando no Paper de teste, e com um commit.
+A 26.1.2 está **UNSUPPORTED** no Paper desde 2026-07-26 (sem builds novos). Foi escolha do usuário; reavaliar.
 
 ## Comandos
 
-```bash
-# definir JAVA_HOME (o java não está no PATH)
-export JAVA_HOME="/c/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot"
-docker compose up -d --wait          # PostgreSQL local
-set -a; . ./.env; set +a              # carrega GREENSKY_DB_PASSWORD
-./gradlew build --no-daemon           # compila, testa, gera build/libs/greensky-*.jar (shaded)
+```bat
+build.bat            :: compila, roda os testes (sobe o Postgres) e copia o jar para server\plugins
+start-server.bat     :: sobe Postgres + Paper; "stop" no console para desligar
 ```
+No Gradle direto: `greensky\gradlew.bat -p greensky build deploy` (`deploy` copia o jar para `server/plugins`).
+Testes com bots (servidor de teste com `online-mode=false` e `server-ip=127.0.0.1`):
+`cd greensky\tools\e2e && npm install --ignore-scripts && npm test` (com `JAVA` e `GREENSKY_DB_PASSWORD` no ambiente).
+Os bots fazem `/register`/`/login` sozinhos quando o nLogin pede (senha só do banco local do nLogin).
+Roteiros: `auth-e2e` (login/identidade), `protection-e2e` (fases 5-6), `first-playable-e2e` (fase 7, com restart).
+No Git Bash, use `MSYS_NO_PATHCONV=1` e caminho `C:/...` no `JAVA` (senão `/nlogin` e `/c/...` viram caminhos).
 
-Servidor de teste: `run/` (ignorado pelo git). Copie o jar para `run/plugins/` e inicie com
-`java -jar paper-26.1.2-74.jar --nogui`. O console do Windows corrompe o `stop` via PowerShell
-(BOM); automatize com pipe do bash: `(sleep 45; echo stop) | java ... --nogui`.
+## Regras do projeto
 
-## Arquitetura
+1. **Uma fase por vez.** A lista oficial é a das seções **154 a 172** do README. Implementar só a fase
+   aprovada; ao terminar, compilar, testar, subir no servidor de teste, documentar no INSTRUCOES.md e
+   **parar e esperar aprovação** antes da próxima.
+2. **Nunca inventar API.** Antes de usar uma classe/método, confirmar na jar (`javap`) ou na documentação
+   oficial do Paper da versão fixada. Se for deprecated/removida, usar o substituto indicado na Javadoc.
+3. **Dependências externas (yPlugins, StormPlugins etc.):** só integrar com o jar real em `libs/`, lido com
+   `javap`. **Nunca supor a API** a partir do nome do plugin ou de memória. Sempre `compileOnly`, nunca
+   embutido; o GreenSky precisa funcionar sem eles (camada `integration/`, criada só quando houver o jar).
+4. **Git:** o projeto mantém o git (`.git/` na raiz), mas o Claude **nunca** faz commit, push, add, reset,
+   checkout, merge ou qualquer comando que altere o repositório **por conta própria**: só quando o usuário
+   pedir explicitamente, e só o que foi pedido. Comandos só de leitura (`status`, `diff`, `log`,
+   `check-ignore`, `ls-files`) podem ser usados para conferir. Fase concluída **não** gera commit automático.
+   Não mexer em `.gitignore`/`.gitattributes` sem pedido.
+5. **Nunca bloquear a thread do servidor** com SQL, arquivo, HTTP ou Redis. Só o boot é bloqueante.
+6. **Segredos fora do código e do git:** senha só em `GREENSKY_DB_PASSWORD` (`.env`).
+7. **Config inválida => plugin não sobe**, com mensagem dizendo a chave.
+8. **WorldBorder por jogador é só visual.** A proteção real é do `IslandProtectionService`.
+9. **Folia:** não declarar `folia-supported`; manter schedulers atrás do `GreenScheduler`.
+10. Ações irreversíveis ou externas (instalar software, aceitar termos, apagar dados, baixar arquivos) só com autorização.
+11. **Lógica de entrada só depois da autenticação** (ver "Identidade e autenticação"). Nada do GreenSky
+    (carregar participações/acesso, dica de início, borda, comandos `/is`) roda para um jogador que ainda
+    não fez login no plugin de login.
 
-Pacote raiz `com.greencodes.greensky`. **Criar pacotes só quando a fase deles chegar.**
+## Identidade e autenticação (decisão de projeto)
+
+- **`online-mode=false` também em produção:** o servidor aceita contas originais e piratas. A
+  autenticação é de um plugin de login (provavelmente **nLogin**), não da Mojang.
+- **Identidade = UUID.** Todo o banco e os serviços usam só o UUID (`players.uuid`, `islands.owner_uuid`,
+  `island_members.player_uuid`, caches e proteção). O nome é só exibição e busca em comandos.
+- **Nick único sem diferenciar maiúsculas** (migration V4: índice único em `lower(name)`). Em
+  `online-mode=false` puro o UUID vem do nick **exato**: `Gustavo` e `gustavo` seriam duas contas e duas
+  ilhas (comprovado sem nLogin). Defesas do GreenSky:
+  - pré-login assíncrono (`PlayerSessionListener`): recusa um nick cuja outra grafia já é de outra conta;
+  - a conta só é registrada (nick reivindicado) **depois** da autenticação;
+  - comandos resolvem nomes pelo banco do GreenSky (`PlayerService.findByName`), nunca pelo cache do servidor.
+- **Com o nLogin 2.0.24 (testado):** a outra grafia do nick recebe o **mesmo UUID** da conta registrada e
+  precisa da senha dela (`/login`). O UUID de uma conta autenticada é o **UUID offline do nick registrado**
+  (`MD5("OfflinePlayer:"+nick)`), igual no cliente, no servidor e no banco. O pré-login do GreenSky continua
+  como defesa se não houver nLogin ou se o comportamento dele mudar.
+- **Autenticação (`integration/auth`):** `AuthBridge` com `NLoginAuthBridge` (ouve
+  `com.nickuc.login.api.event.bukkit.auth.AuthenticateEvent`, que dispara no `/register` e no `/login`;
+  `nLoginAPI.isAuthenticated` para `/reload`) e `NoAuthBridge` (entrar = autenticado). Ao autenticar,
+  `PlayerSessionService` registra a conta e dispara `GreenSkyPlayerReadyEvent` (módulo `greensky-api`);
+  participações, borda, dica de início e comandos `/is` só existem a partir daí.
+- **Config `auth`:** `provider: nlogin|none` e `dev-mode`. `nlogin` sem o plugin => não sobe.
+  `none` + `online-mode=false` => **não sobe**, a menos que `dev-mode: true` (aviso forte no log; só para
+  desenvolvimento/testes com bots). O padrão do jar é `nlogin` + `dev-mode: false`.
+- **nLogin:** jar `libs/nLogin-2.0.24.jar` (versão grátis; `compileOnly`; também em `server/plugins/`). A API
+  vem embutida no jar do plugin; no Maven (`repo.nickuc.com`) só existe `com.nickuc.login:api:2.0` (a
+  documentação cita "10.4", que não existe). Código fechado; login automático de contas originais só na
+  versão paga. Ao iniciar, **baixa dependências da internet**; o jar se identifica como "2.0.24 DEV".
+  Assistente feito no servidor de teste: idioma inglês, canal estável, **atualização com confirmação manual**,
+  senha "Safer", **sem diálogos** (comandos; diálogos exigem cliente 1.21.6+), nAntiBot recusado. O nLogin
+  avisa que **as coordenadas não são protegidas antes do login** (configurar `/nlogin spawn set join` em produção).
+
+## Estado das fases (seções 154–172)
+
+| Fase | Status |
+|---|---|
+| 0 Análise · 1 Core · 2 Database · 3 World · 4 Islands · 5 Protection · 6 Expansion · 7 First Playable | concluídas |
+| **8 Gameplay** — 8.1 Base de conteúdo + Coleções | **concluída** |
+| 8.2 Pesca (nativa) | **concluída** |
+| 8.3 Agricultura (nativa) | **colheita, achados raros, qualidade, plantio ancestral, fertilizante e guia agrícola implementados/testados; demais mecânicas avançadas pendentes** |
+| 8.4 Quests · 8.5 Exploração | pendentes |
+| 9 Combat · 10 Social · 11 Economy · 12 Content · 13 Cosmetics · 14 Monetization · 15 Integrations · 16 Scale · 17 Hardening · 18 Performance | pendentes |
+
+Pendente fora das fases: ViaVersion/ViaBackwards 5.12.0 para clientes 1.21.x (planejado, não implementado).
+
+## Arquitetura (greensky-core, pacote `com.greencodes.greensky`)
 
 ```
-GreenSkyPlugin          # onEnable: config -> senha -> Database -> GreenScheduler -> WorldManager
-core/GreenScheduler     # único acesso a schedulers (global/async do Paper)
-core/config/            # GreenSkyConfig + IslandSettings/DatabaseSettings/WorldSettings (records validados)
-database/               # Database (Hikari + Flyway + executor async), SqlFunction, DatabaseException
-generation/             # VoidGenerator, SingleBiomeProvider
-world/                  # WorldManager, SkyWorld
-player/                 # PlayerRepository (upsert em players)
-island/                 # Island, IslandRegion (espiral de slots), IslandMember/Role/Permission,
-                        # IslandRepository (SQL), IslandService (regras, async, cache dono->ilha),
-                        # IslandBuilder (interface) + StarterIslandBuilder (ilha por código), IslandCommand
-protection/             # IslandIndex (índice espacial em memória), IslandProtectionService (decisões, sem Bukkit),
-                        # PlayerProtectionListener, WorldProtectionListener, ProtectionSessionListener, DenyNotifier
-border/                 # IslandBorderService (WorldBorder por jogador, só visual) + IslandBorderListener
-visit/                  # VisitorExpeller (ilha ficou privada -> visitantes ao spawn), HomeListener (renascer na ilha, dica de início)
-resources/db/migration/ # V1__players.sql, V2__islands.sql, V3__island_settings.sql (Flyway)
-tools/e2e/              # teste de ponta a ponta com bots reais (mineflayer); node_modules ignorado
+GreenSkyPlugin   # liga tudo no onEnable: config -> banco -> mundo -> ilhas -> proteção -> borda -> visitas
+core/            # GreenScheduler; config/ (GreenSkyConfig e records validados)
+database/        # Database (Hikari + Flyway + executor async)
+generation/      # VoidGenerator, SingleBiomeProvider
+world/           # WorldManager, SkyWorld
+player/          # PlayerService (nick único), PlayerSessionService (sessão após login), PlayerSessionListener (pré-login)
+integration/     # auth/: AuthBridge, NLoginAuthBridge, NoAuthBridge (plugins externos ficam só aqui)
+content/         # Rarity, ContentItem, ContentRegistry (items.yml), ItemFactory (id escondido no item), ContentYaml, ItemCommand
+collection/      # CollectionCatalog (collections.yml), CollectionService (memória + lote), CollectionTracker
+                 # (porta das atividades; dispara CollectionDiscoverEvent), CollectionListener, CollectionCommand
+fishing/         # FishTable (sorteio em memória), FishConditions/FishingEnvironment (hora, clima, lua), FishLoader
+                 # (content/fish.yml), AfkFishingGuard (pesca parada), FishingListener (só troca o peixe vanilla)
+farming/         # CropCatalog (content/crops.yml), FarmingListener (planta madura quebrada manualmente)
+                 # CropQuality (pesos 1..3 estrelas), CropItemFactory (PDC crop_quality)
+                 # CropMarkers/AncientPlants (PDC do chunk), AncientPlantListener (proteção ambiental)
+                 # FertilizerListener (Trigo Dourado), FarmingCommand (/agricultura: guia e inspeção)
+island/          # domínio, IslandRepository (SQL), IslandService (regras, async, cache), IslandCommand
+protection/      # IslandIndex (índice espacial), IslandProtectionService (decisões), listeners
+border/          # WorldBorder visual por jogador
+visit/           # expulsão ao ficar privada, renascer na ilha, dica de início
+resources/db/migration/  # V1 players, V2 islands, V3 island_settings, V4 nick único, V5 collection_progress
+resources/content/       # items.yml, collections.yml (copiados para plugins/GreenSky/content na 1ª vez; PROVISÓRIOS)
+greensky-api/    # api/event/GreenSkyPlayerReadyEvent, CollectionDiscoverEvent (contratos públicos)
 ```
+- Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos. Sem singleton nem `static` de estado.
+- Pacotes: `island` não depende de `protection`/`border`/`visit` (eles dependem de `island`, via `IslandListener`).
+- Criar pacotes só quando a fase deles chegar.
 
-Proteção (fase 5): regras em `IslandProtectionService`; listeners só traduzem eventos.
-- Antes de carregar as ilhas, ou fora de qualquer ilha (spawn, vazio), **tudo é negado**.
-- Dentro de uma ilha: só membros, conforme `IslandPermission` (dono tem tudo). Visitante não faz nada.
-- Efeitos sem jogador (explosão, pistão, líquido, hopper, fogo, crescimento, dispenser) não cruzam a fronteira da região.
-- Pérola/fruta do coro só levam a ilhas das quais o jogador é membro.
-- Bypass: permissão `greensky.admin.bypass` (op).
-- `IslandService` avisa a proteção por `IslandListener` depois de gravar no banco; participações carregam no join.
+## Menus e modelos de ilha (pedido adicional)
 
-Expansão (fase 6): níveis em `islands.expansion-levels` (começa em `initial-size`, crescente, até `max-size`).
-Só muda `islands.size` (mesmo centro; nada é regenerado). `UPDATE ... WHERE size = <antigo>` garante que de
-duas expansões simultâneas só uma vale (`EXPANSION_CONFLICT`). `onIslandExpanded` atualiza o índice da
-proteção e a borda de quem está na ilha. Hoje só por `/is admin expand <nick>` (sem custo; economia é fase 15).
+Implementados em desenvolvimento, com 137 testes Java passando. Roteiro de menus ainda possui pendência
+na lista paginada de visitas; ver INSTRUCOES.md. Não declarar esta entrega concluída.
+Novos modelos são determinísticos por posição; ilhas existentes não são reescritas.
+Dependências Vault/ViaVersion/ViaBackwards/LuckPerms e fontes foram solicitadas, mas ainda não instaladas.
 
-Visitas (fase 7): `/is visit <nick>`, `/is public`, `/is private` (tabela `island_settings`; padrão em
-`islands.default-visibility`). Membros sempre visitam. Ficou privada: visitantes não-membros vão ao spawn.
-Quem morre renasce na própria ilha (sem cama/âncora). Jogador sem ilha recebe a dica `/is create` ao entrar.
-Regra de pacotes: `island` não depende de `protection`/`visit`/`border` (estes dependem de `island`).
+## Plugins externos no servidor de teste
 
-Teste com bots (servidor de teste precisa de `online-mode=false` e `server-ip=127.0.0.1` em `run/server.properties`; **nunca em produção**).
-`lib.mjs` = apoio comum; `protection-e2e.mjs` (fases 5-6, 30 checks); `first-playable-e2e.mjs` (fase 7, 19 checks, reinicia o servidor no meio):
-```bash
-cd tools/e2e && npm install --ignore-scripts && JAVA="$JAVA_HOME/bin/java.exe" npm test
-```
+Ver INSTRUCOES.md ("Plugins externos: StormPlugins e yPlugins"). Hoje: só GreenSky + nLogin + o carregador
+StormPlugins (com todos os plugins Storm em `plugins_nao_carregar`); `yPlugins-3.7.0.jar` guardado em `libs/`.
+Os carregadores baixam os plugins para a memória (sem jar em disco => **não dá para integrar**, regra 3) e
+têm licença presa ao IP:porta. **Fase 8: pesca e agricultura nativas, sem integração com Storm/y.**
 
-Comando: `/island` (alias `/is`): `create`, `home`, `info`, `add <online>`, `remove <nome>`, e
-`admin create <nick>` (permissão `greensky.admin`, funciona no console).
+## Conteúdo e coleções (8.1)
 
-Ilhas: slot vindo da sequência `island_slot_seq` (começa em 1; slot 0 = origem/spawn, reservado),
-posição em espiral quadrada com `islands.spacing`. Centro e tamanho ficam gravados no banco (mudar
-`spacing` não move ilhas existentes). `state` PENDING/READY: criação grava a linha, gera os blocos e
-só então marca READY; PENDING é refeito por `ensureReady` (usado no `/is home`).
+- Itens do GreenSky: identidade no `PersistentDataContainer` (`greensky:item`), nunca nome/lore.
+- Conteúdo em `plugins/GreenSky/content/*.yml`, lido por `ContentYaml` (separador `/`: chaves com ponto
+  como `fish.cod` ficam inteiras). Erro no arquivo => plugin não sobe, dizendo arquivo e chave.
+- Chaves de entrada de coleção são gravadas no banco: renomear uma chave apaga o progresso dela.
+- Atividades registram progresso por `CollectionTracker.record(player, chave, qtd)` na thread do servidor.
+  Progresso em memória, gravado em lote a cada 10 s, ao sair e ao desligar (crash perde no máximo ~10 s).
 
-Camadas: `Listener/Command -> Service -> Repository`. Listeners e comandos finos. Sem singleton, sem `static` de estado.
+## Pesca (8.2)
 
-## Regras que não podem ser quebradas
-
-1. **Não inventar API.** Confirmar na jar (`javap`) ou na doc oficial do Paper antes de usar.
-2. **Nunca bloquear a thread principal** com SQL, arquivo, HTTP ou Redis. Só o boot (`Database.open`) é bloqueante.
-3. **Segredos fora do git.** Senha só em `GREENSKY_DB_PASSWORD` (`.env` ignorado). Nada no `config.yml`.
-4. **Config inválida => plugin não sobe** (loga erro e se desabilita). Já vale para `spacing > max-size + spacing-margin`.
-5. **WorldBorder por jogador é só visual.** A proteção real é do `IslandProtectionService` (fase 5).
-6. **Sem integração externa agora.** Não criar `integration/` (Storm, yPlugins) até haver as APIs reais.
-7. **Folia:** não declarar `folia-supported`. Só manter tudo atrás do `GreenScheduler`.
-8. Não salvar blocos no banco; mundo/chunks ficam no Paper.
-9. Ações irreversíveis ou externas (instalar software, aceitar termos, commit/push) só com pedido ou autorização do usuário.
+Peixe do GreenSky (e +1 na coleção, contado na fisgada) só quando: SkyWorld, jogador pronto, ilha de que é
+dono/membro, água aberta (`FishHook#isInOpenWater`, `fishing.require-open-water`) e sem pesca parada
+(`fishing.afk-max-catches-same-spot` fisgadas seguidas na mesma posição+mira). Senão: pesca vanilla.
+Lixo e tesouro vanilla nunca são trocados. Lua: `MoonPhase.getPhase(world.getFullTime() / 24000)`.
+`fish.yml`: cada id precisa existir na coleção `fishing`; nome e raridade vêm de `collections.yml`.
 
 ## Armadilhas já encontradas
 
-- Mundos de plugin ficam em `world/dimensions/minecraft/<nome>/` no Paper 26 (backup deve cobrir `world/`).
-- `WorldCreator.keepSpawnLoaded` está removido na prática (sem chunks de spawn desde a 1.21.9). Não usar.
-- Chamar `World.save()` à mão gera WARN; o servidor já salva ao desligar.
-- Flyway 13: `FluentConfiguration(ClassLoader)`, sem `.classLoader()`. Usar `failOnMissingLocations(true)`.
-- Shadow: `duplicatesStrategy = INCLUDE` + `mergeServiceFiles()`, senão some o suporte a PostgreSQL do Flyway. Hikari precisa de `setDriverClassName` (DriverManager não vê drivers de plugin).
-- `verifyVoid()` olha o chunk 0,0; na Fase 4 isso vira falso alarme quando a ilha inicial ocupar esse chunk.
-- Paper 26.2 tem NPE ao receber `stop` no console no exato instante do "Done" (bug do servidor).
-- `gradlew` deve ficar com LF (`.gitattributes`).
-- `World.generateTree(Location, TreeType)` é deprecated; usar `generateTree(Location, Random, TreeType)`.
-- Os testes `*IT` consomem a sequência de slots: ilhas de teste ficam em posições altas, com buracos. Normal.
-- Comandos de console no teste: `execute in minecraft:greensky_world run forceload add X Z` antes de `execute ... if block`; `if block` não leva `run`.
-- `TeleportCause.CHORUS_FRUIT` está deprecated para remoção; usar `CONSUMABLE_EFFECT`.
-- `getOfflinePlayer(String)` pode consultar a Mojang (rede); em comandos use `getOfflinePlayerIfCached`.
-- Config: o `getConfig()` do Bukkit usa o `config.yml` do jar como padrão, então **chave ausente recebe o valor padrão** (não 0). `requireInt`/`requireString`/`requireIntList` pegam **tipo errado** (que antes caía no padrão em silêncio). Os testes de config não têm esses padrões; lá chave ausente vira erro.
-- Borda por jogador: `Server#createWorldBorder` + `Player#setWorldBorder(null)` volta à borda do mundo. O centro é `min + size/2` (a região é `[min, min+size)`).
-- Água no Minecraft corre só na direção da queda mais próxima (até 4 blocos): testes de fluido precisam de piso largo.
-- Lacunas conhecidas da proteção (não cobertas): pegar/dropar itens por visitantes, PvP, dano de mobs a entidades, barcos colocados em água, projéteis acionando botões/alvos, laço/vara de pesca puxando entidades, endermen dentro da ilha. Visitantes não podem nem abrir portas (decisão: configurável na fase social).
-- Corrida no join: se um membro for adicionado enquanto as participações carregam, ele fica sem acesso até reentrar (erra para negar).
+- YAML do Bukkit: o ponto é separador de caminho; `Material.isItem()` exige o servidor (não usar em teste
+  de unidade sem injetar).
+- Ilha muito grande: a borda passa da distância de simulação do jogador; testes de fronteira precisam de `forceload`.
 
-## Plano ViaVersion (clientes 1.21.x entrarem no servidor 26.1.2)
-
-Não implementado. Só plugins na pasta `plugins/` do servidor, sem código do GreenSky.
-- **ViaVersion** (cliente mais novo que o servidor) e **ViaBackwards** (cliente mais antigo que o servidor) rodam juntos, na mesma versão. Para 1.21.x entrando em servidor 26.1.2 o necessário é o **ViaBackwards**.
-- Versão pesquisada: **5.12.0** (Hangar, set/2026; declara suporte a Paper até 26.3). O changelog cita correções "26.1 -> 1.21.11", ou seja, clientes 1.21.11 são tratados. **Não confirmado:** até que 1.21.x mais antigo ele aceita.
-- Passos: baixar do Hangar com checksum, fixar a versão, testar com cliente real 1.21.11 (e 1.21.x mais antigos), medir CPU/RAM com spark, documentar em `INSTRUCOES.md`.
-- Riscos: custo de CPU da tradução; itens, GUIs e resource pack futuros podem renderizar diferente em cliente antigo; é plugin externo (não depender dele no código).
-
-## Decisões em aberto
-
-- Ilha inicial hoje é por código (disco + árvore). Trocar por template/schematic implementando `IslandBuilder`.
-- Apontar o mundo `world` padrão para o gerador void via `bukkit.yml` (não testado).
-- Versão do Paper para produção: a 26.1.2 está sem suporte no Paper; reavaliar (26.2 STABLE, ou 26.3 quando STABLE).
+- Mundos de plugin ficam em `server/world/dimensions/minecraft/<nome>/` (backup deve cobrir `server/world/`).
+- `keepSpawnLoaded`, `generateTree(Location, TreeType)`, `TeleportCause.CHORUS_FRUIT`: deprecated; ver substitutos no INSTRUCOES.md.
+- `World.save()` manual gera WARN. `getOfflinePlayer(String)` pode ir à rede: usar `getOfflinePlayerIfCached`.
+- Flyway 13: `new FluentConfiguration(loader)`; Shadow: `duplicatesStrategy = INCLUDE` + `mergeServiceFiles()`.
+- `getConfig()` usa o config.yml do jar como padrão: chave ausente recebe o padrão; tipo errado é rejeitado.
+- Arquivos `.bat` precisam de CRLF; e chamar programas pelo caminho completo (`%~dp0...`): com
+  `NoDefaultCurrentDirectoryInExePath` definido, o `cmd` não procura na pasta atual.
+- Água corre só para a queda mais próxima (testes de fluido precisam de piso largo).
+- Lacunas conhecidas da proteção: pegar/dropar itens por visitantes, PvP, barcos, projéteis em botões, endermen.

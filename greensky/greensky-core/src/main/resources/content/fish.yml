@@ -1,0 +1,51 @@
+# Peixes do GreenSky (README seções 32 e 146). Cada id precisa existir na coleção "fishing" de
+# collections.yml, de onde vêm o nome e a raridade. Material provisório: o resource pack (fase futura)
+# dará a aparência própria; a identidade do peixe fica escondida no item, não no material.
+#
+#   material: item vanilla usado como base
+#   weight:   peso no sorteio entre os peixes possíveis no momento (maior = mais comum)
+#   size:     [mínimo, máximo] em cm; tamanhos grandes são mais raros e dão mais estrelas (★)
+#   conditions (opcional; padrão ANY):
+#     time:    ANY | DAY | NIGHT
+#     weather: ANY | CLEAR (sem chuva) | RAIN (chuva ou tempestade) | THUNDER (só tempestade)
+#     moon:    ANY | FULL (lua cheia) | NEW (lua nova)
+
+fish:
+  fish.cod:
+    material: COD
+    weight: 50
+    size: [20, 60]
+
+  fish.salmon:
+    material: SALMON
+    weight: 35
+    size: [30, 90]
+
+  fish.pufferfish:
+    material: PUFFERFISH
+    weight: 12
+    size: [10, 35]
+
+  fish.tropical:
+    material: TROPICAL_FISH
+    weight: 10
+    size: [5, 25]
+    conditions: { weather: RAIN }        # "Rain -> Rare fish"
+
+  fish.storm_eel:
+    material: COD
+    weight: 4
+    size: [60, 150]
+    conditions: { weather: THUNDER }     # "Storm -> Electric fish"
+
+  fish.moon_koi:
+    material: TROPICAL_FISH
+    weight: 3
+    size: [30, 70]
+    conditions: { time: NIGHT, moon: FULL }   # "Full Moon -> Mythical fish"
+
+  fish.abyssal_whisper:
+    material: PUFFERFISH
+    weight: 2
+    size: [100, 250]
+    conditions: { time: NIGHT, weather: THUNDER, moon: NEW }

@@ -1,0 +1,49 @@
+# GreenSky - configuração principal.
+# Regra validada no boot: spacing > max-size + spacing-margin.
+# Se não passar, o plugin NÃO sobe.
+
+islands:
+  initial-size: 100     # tamanho inicial da ilha (blocos)
+  max-size: 1000        # maior tamanho que uma ilha pode atingir
+  spacing: 1200         # distância centro a centro entre ilhas
+  spacing-margin: 100   # folga mínima entre áreas de ilhas vizinhas
+  base-y: 100           # altura da superfície da ilha inicial
+  starter-radius: 8     # raio do terreno inicial; novos modelos têm lago, árvore e baú (diâmetro cabe em initial-size)
+  # Tamanho (lado) de cada nível de expansão. Começa em initial-size, cresce sempre, até max-size.
+  # A ilha nunca se move: só a área liberada aumenta, a partir do mesmo centro.
+  expansion-levels: [100, 150, 200, 300, 500]
+  # Visibilidade de ilhas novas: public (qualquer um pode /is visit) ou private (só membros).
+  default-visibility: public
+
+auth:
+  # Quem autentica os jogadores. O servidor roda com online-mode=false (originais e piratas),
+  # então em produção é obrigatório um plugin de login.
+  #   nlogin: exige o plugin nLogin instalado; o GreenSky só atende quem já fez login.
+  #   none:   entrar já conta como autenticado. Com online-mode=false SÓ funciona com dev-mode: true.
+  provider: nlogin
+  # PERIGOSO: com provider none e online-mode=false, qualquer um entra com qualquer nick.
+  # Só para desenvolvimento/testes com bots. Nunca em produção.
+  dev-mode: false
+
+database:
+  host: 127.0.0.1
+  port: 5432
+  name: greensky
+  user: greensky
+  pool-size: 10
+  # A senha NUNCA fica aqui: use a variável de ambiente GREENSKY_DB_PASSWORD.
+
+world:
+  name: greensky_world  # pasta do mundo SkyBlock; nao pode ser world/world_nether/world_the_end
+  spawn-y: 100          # altura do spawn fixo (mundo void)
+
+fishing:
+  # Peixes do GreenSky (e progresso na coleção Pesca) só quando: o jogador pesca na ilha de que é dono
+  # ou membro, em água aberta e sem pesca parada. Fora disso a pesca continua vanilla.
+  # true: exige água aberta (regra do Minecraft: área livre de 5x4x5); barra o "balde de 1 bloco".
+  require-open-water: true
+  # Pesca parada (AFK/fazenda): fisgadas seguidas na MESMA posição e MESMA mira que ainda contam.
+  afk-max-catches-same-spot: 10
+
+performance:
+  max-entities-per-island: 500

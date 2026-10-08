@@ -1,0 +1,15 @@
+# Uma planta madura colhida manualmente = +1, independentemente de Fortuna e número de drops.
+# Semente Ancestral planta trigo especial: imaturo devolve a semente, maduro rende 1 Trigo Dourado ★★★.
+# Trigo Dourado: clique direito em trigo/cenoura/batata imaturos; consome 1, avança 2 estágios e garante ★★★.
+# Uma aplicação por planta; não se aplica ao trigo ancestral. Quebra imatura perde o tratamento.
+quality-weights: [80, 18, 2] # uma, duas e três estrelas; arquivos antigos recebem esses padrões
+crops:
+  WHEAT:
+    entry: crop.wheat
+    bonuses:
+      crop.golden_wheat: { material: WHEAT, chance: 0.02 }
+      crop.ancient_seed: { material: WHEAT_SEEDS, chance: 0.002 }
+  CARROTS:
+    entry: crop.carrot
+  POTATOES:
+    entry: crop.potato

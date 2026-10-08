@@ -1,0 +1,41 @@
+# Coleções do GreenSky (README seções 30 e 84). PROVISÓRIO: as etapas 8.2 (pesca), 8.3 (agricultura)
+# e 8.5 (exploração) vão definir o conteúdo de verdade. As chaves são gravadas no banco: renomear uma
+# chave faz os jogadores perderem o progresso dela.
+#
+# Formato:
+#   collections:
+#     <id da coleção>:
+#       name: "Nome exibido"
+#       entries:
+#         <chave.unica>: { name: "Nome", rarity: COMMON|UNCOMMON|RARE|EPIC|LEGENDARY|MYTHIC|SECRET }
+# SECRET aparece como "???" até ser descoberta. Uma chave só pode existir em uma coleção.
+
+collections:
+  fishing:
+    name: "Pesca"
+    entries:
+      fish.cod:            { name: "Bacalhau", rarity: COMMON }
+      fish.salmon:         { name: "Salmão", rarity: COMMON }
+      fish.pufferfish:     { name: "Baiacu", rarity: UNCOMMON }
+      fish.tropical:       { name: "Peixe Tropical", rarity: RARE }
+      fish.storm_eel:      { name: "Enguia da Tempestade", rarity: LEGENDARY }
+      fish.moon_koi:       { name: "Carpa da Lua Cheia", rarity: MYTHIC }
+      fish.abyssal_whisper: { name: "Sussurro Abissal", rarity: SECRET }
+
+  farming:
+    name: "Agricultura"
+    entries:
+      crop.wheat:          { name: "Trigo", rarity: COMMON }
+      crop.carrot:         { name: "Cenoura", rarity: COMMON }
+      crop.potato:         { name: "Batata", rarity: COMMON }
+      crop.golden_wheat:   { name: "Trigo Dourado", rarity: RARE }
+      crop.ancient_seed:   { name: "Semente Ancestral", rarity: LEGENDARY }
+
+  exploration:
+    name: "Exploração"
+    entries:
+      region.meadows:          { name: "Meadows", rarity: COMMON }
+      region.enchanted_forest: { name: "Enchanted Forest", rarity: UNCOMMON }
+      region.ancient_ruins:    { name: "Ancient Ruins", rarity: RARE }
+      region.underground:      { name: "Underground", rarity: EPIC }
+      region.mystic_lands:     { name: "Mystic Lands", rarity: LEGENDARY }

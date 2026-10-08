@@ -1,0 +1,45 @@
+name: GreenSky
+version: '${version}'
+main: com.greencodes.greensky.GreenSkyPlugin
+api-version: '26.1'
+description: SkyBlock RPG vivo, explorável e social.
+authors: [GreenCodes]
+# nLogin é opcional (auth.provider), mas quando existe precisa iniciar antes do GreenSky.
+softdepend: [nLogin]
+
+commands:
+  island:
+    description: Gerencia a sua ilha
+    usage: /<command> <create|home|info|visit|public|private|add|remove>
+    aliases: [is]
+
+  collections:
+    description: Registro de descobertas e coleções
+    usage: /<command> [coleção]
+    aliases: [colecoes, colecao]
+  greensky:
+    description: Administração do GreenSky
+    usage: /<command> item <give|check>
+    aliases: [gs]
+  agricultura:
+    description: Guia de agricultura e estado da cultura observada
+    usage: /<command>
+    aliases: [farming]
+  menu:
+    description: Menu principal do GreenSky
+    usage: /<command>
+    aliases: [jogar]
+  guia:
+    description: Como jogar no GreenSky
+    usage: /<command>
+  pesca:
+    description: Guia de pesca e coleção
+    usage: /<command>
+
+permissions:
+  greensky.admin:
+    description: Comandos administrativos do GreenSky
+    default: op
+  greensky.admin.bypass:
+    description: Ignora a proteção das ilhas (construir, quebrar e abrir em qualquer ilha)
+    default: op

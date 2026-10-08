@@ -1,19 +1,39 @@
-# Gradle
+# ---------- Segredos ----------
+.env
+*.env
+# (.env.example é versionado: modelo sem senha)
+
+# ---------- Gradle / build ----------
 .gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
-# IDE
+# ---------- IDE ----------
 .idea/
 *.iml
 .vscode/
 out/
 
-# Test server (jar, worlds, logs)
-run/
-
-# Secrets
-.env
-*.env
-run-*/
+# ---------- Node (testes com bots) ----------
 node_modules/
+
+# ---------- Jars externos (só para compilar; não versionar jars de terceiros) ----------
+libs/*.jar
+
+# ---------- Servidor de teste ----------
+# Mundo, jars, bibliotecas, logs e dados de jogadores ficam fora.
+# Só configurações sem segredos são versionadas.
+server/*
+!server/bukkit.yml
+!server/spigot.yml
+!server/commands.yml
+!server/config/
+server/config/*
+!server/config/paper-global.yml
+!server/config/paper-world-defaults.yml
+# server.properties NÃO é versionado: contém management-server-secret gerado pelo servidor.
+# (online-mode=false é intencional, também em produção: a autenticação é do plugin de login.)
+
+# ---------- Estruturas antigas (antes da reorganização) ----------
+run/
+run-*/
